@@ -743,7 +743,7 @@ let state = {
     adultIndex: 0,
     adultScore: 0,
     adultFinished: false,
-
+    playerId: null,
     guessNumber: null,
 
     sequenceGame: null,
@@ -768,13 +768,18 @@ async function registerPlayer() {
         localStorage.getItem("player_id");
 
     if (!playerId) {
-        playerId = crypto.randomUUID();
+
+        playerId =
+            crypto.randomUUID();
 
         localStorage.setItem(
             "player_id",
             playerId
         );
     }
+
+    // сохраняем ID в state
+    state.playerId = playerId;
 
     const { data, error } =
         await supabaseClient
@@ -802,10 +807,12 @@ async function registerPlayer() {
             .single();
 
     if (error) {
+
         console.error(
             "Ошибка регистрации игрока:",
             error
         );
+
         return;
     }
 
@@ -813,15 +820,29 @@ async function registerPlayer() {
         "Игрок зарегистрирован:",
         data
     );
+
+    saveState();
+
+    // запускаем realtime именно здесь
+    startPlayerRealtime();
 }
-startPlayerRealtime();
+
 
 async function loadOperatorPlayers() {
 
     const box =
         document.getElementById("operatorPlayers");
 
-    if (!box) return;
+    if (!box) {
+        console.error(
+            "❌ #operatorPlayers не найден"
+        );
+        return;
+    }
+
+    console.log(
+        "⏳ Загружаем игроков..."
+    );
 
     box.innerHTML = `
         <div class="instruction">
@@ -832,12 +853,7 @@ async function loadOperatorPlayers() {
     const { data, error } =
         await supabaseClient
             .from("players")
-            .select(`
-                player_id,
-                current_stage,
-                pending_operator,
-                updated_at
-            `)
+            .select("*")
             .order(
                 "updated_at",
                 {
@@ -845,27 +861,34 @@ async function loadOperatorPlayers() {
                 }
             );
 
-    if (error) {
+    console.log(
+        "PLAYERS DATA:",
+        data
+    );
 
-        console.error(
-            "Ошибка загрузки игроков:",
-            error
-        );
+    console.log(
+        "PLAYERS ERROR:",
+        error
+    );
+
+    if (error) {
 
         box.innerHTML = `
             <div class="instruction">
-                Не удалось загрузить игроков.
+                ❌ Ошибка загрузки игроков
+                <br><br>
+                ${error.message}
             </div>
         `;
 
         return;
     }
 
-    if (!data.length) {
+    if (!data || !data.length) {
 
         box.innerHTML = `
             <div class="instruction">
-                Пока нет игроков.
+                Игроков пока нет.
             </div>
         `;
 
@@ -875,19 +898,10 @@ async function loadOperatorPlayers() {
     box.innerHTML =
         data.map(player => {
 
-            const selected =
-                player.player_id ===
-                operatorPlayerId;
-
-            const pending =
-                player.pending_operator;
-
             return `
                 <button
                     type="button"
-                    class="operator-player
-                        ${selected ? "selected" : ""}
-                        ${pending ? "has-pending" : ""}"
+                    class="operator-player"
                     onclick="
                         selectOperatorPlayer(
                             '${player.player_id}'
@@ -896,25 +910,26 @@ async function loadOperatorPlayers() {
                 >
 
                     <span class="operator-player-status">
-                        ${pending ? "●" : "○"}
+                        ●
                     </span>
 
                     <span class="operator-player-info">
 
                         <strong>
                             ИГРОК
-                            ${player.player_id.slice(0, 8)}
+                            ${String(
+                                player.player_id
+                            ).slice(0, 8)}
                         </strong>
 
                         <small>
-                            ЭТАП ${player.current_stage}
+                            ЭТАП
+                            ${player.current_stage}
                         </small>
 
                     </span>
 
-                    <span>
-                        →
-                    </span>
+                    <span>→</span>
 
                 </button>
             `;
@@ -924,40 +939,40 @@ async function loadOperatorPlayers() {
 
 async function selectOperatorPlayer(playerId) {
 
+    console.log("Выбираем игрока:", playerId);
+
     const { data, error } =
         await supabaseClient
             .from("players")
             .select("*")
-            .eq(
-                "player_id",
-                playerId
-            )
+            .eq("player_id", playerId)
             .single();
 
     if (error) {
 
         console.error(
-            "Ошибка загрузки игрока:",
+            "❌ Ошибка загрузки игрока:",
             error
         );
 
         return;
     }
 
-    operatorPlayerId =
-        playerId;
+    // ВАЖНО
+    operatorPlayerId = playerId;
 
     operatorPlayerState =
-        data.state;
+        data.state || {};
 
     console.log(
-        "Выбран игрок:",
-        data
+        "✓ Игрок выбран:",
+        operatorPlayerId
     );
 
-    peratorPlayerId = playerId;
-
-    operatorPlayerState = data.state || {};
+    console.log(
+        "✓ State игрока:",
+        operatorPlayerState
+    );
 
     renderOperator();
 }
@@ -6936,15 +6951,67 @@ function renderRPSPlayer() {
 
 async function operatorNext() {
 
-    const id = state.currentStage;
+    console.log(
+        "NEXT → игрок:",
+        operatorPlayerId
+    );
 
-    if (!id) return;
+    if (!operatorPlayerId) {
 
-    state.pendingOperator = null;
+        console.error(
+            "❌ Игрок не выбран"
+        );
 
-    completeStage(id);
+        return;
+    }
 
-    await saveOperatorPlayerState();
+    const playerState =
+        operatorPlayerState || state;
+
+    const currentStage =
+        playerState.currentStage;
+
+    playerState.pendingOperator = null;
+
+    playerState.currentStage =
+        currentStage + 1;
+
+    operatorPlayerState =
+        playerState;
+
+    const { error } =
+        await supabaseClient
+            .from("players")
+            .update({
+                state: playerState,
+
+                current_stage:
+                    playerState.currentStage,
+
+                pending_operator:
+                    playerState.pendingOperator,
+
+                updated_at:
+                    new Date().toISOString()
+            })
+            .eq(
+                "player_id",
+                operatorPlayerId
+            );
+
+    if (error) {
+
+        console.error(
+            "❌ Ошибка обновления:",
+            error
+        );
+
+        return;
+    }
+
+    console.log(
+        `✓ Этап ${currentStage} → ${playerState.currentStage}`
+    );
 
     renderOperator();
 }
