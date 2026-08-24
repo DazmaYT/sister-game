@@ -756,8 +756,8 @@ let state = {
 
     pendingOperator: null
 };
-let operatorPlayerId = null;
-let operatorPlayerState = null;
+
+
 registerPlayer();
 /* =====================================================
    Players
@@ -985,7 +985,7 @@ function getOperatorState() {
     return operatorPlayerState || state;
 }
 
-state = operatorPlayerState;
+
 /* =====================================================
    LOAD / SAVE
 ===================================================== */
