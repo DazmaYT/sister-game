@@ -1,3 +1,15 @@
+const SUPABASE_URL =
+    "https://yqmctiqdxcvdpharsziy.supabase.co";
+
+const SUPABASE_KEY =
+    "sb_publishable_8esZpYy0cMumlZoseQyuXA_9iQCRZJ-";
+
+const supabaseClient =
+    window.supabase.createClient(
+        SUPABASE_URL,
+        SUPABASE_KEY
+    );
+
 "use strict";
 
 /* =====================================================
@@ -744,7 +756,62 @@ let state = {
 
     pendingOperator: null
 };
+registerPlayer();
+/* =====================================================
+   REGISTER
+===================================================== */
+async function registerPlayer() {
 
+    let playerId =
+        localStorage.getItem("player_id");
+
+    if (!playerId) {
+        playerId = crypto.randomUUID();
+
+        localStorage.setItem(
+            "player_id",
+            playerId
+        );
+    }
+
+    const { data, error } =
+        await supabaseClient
+            .from("players")
+            .upsert(
+                {
+                    player_id: playerId,
+
+                    current_stage:
+                        state.currentStage,
+
+                    pending_operator:
+                        state.pendingOperator,
+
+                    state: state,
+
+                    updated_at:
+                        new Date().toISOString()
+                },
+                {
+                    onConflict: "player_id"
+                }
+            )
+            .select()
+            .single();
+
+    if (error) {
+        console.error(
+            "Ошибка регистрации игрока:",
+            error
+        );
+        return;
+    }
+
+    console.log(
+        "Игрок зарегистрирован:",
+        data
+    );
+}
 
 /* =====================================================
    LOAD / SAVE
@@ -774,12 +841,52 @@ function loadState() {
 }
 
 
-function saveState() {
+async function saveState() {
 
+    // Старое локальное сохранение — оставляем
     localStorage.setItem(
         STORAGE_KEY,
         JSON.stringify(state)
     );
+
+    // Если Supabase ещё не загрузился — не мешаем игре
+    if (!window.supabase || !supabaseClient) {
+        return;
+    }
+
+    const playerId =
+        localStorage.getItem("player_id");
+
+    if (!playerId) {
+        return;
+    }
+
+    const { error } =
+        await supabaseClient
+            .from("players")
+            .update({
+                current_stage:
+                    state.currentStage,
+
+                pending_operator:
+                    state.pendingOperator,
+
+                state: state,
+
+                updated_at:
+                    new Date().toISOString()
+            })
+            .eq(
+                "player_id",
+                playerId
+            );
+
+    if (error) {
+        console.error(
+            "Ошибка синхронизации:",
+            error
+        );
+    }
 }
 
 
@@ -7368,6 +7475,8 @@ function renderReactionStage() {
     `;
 }
 
+
+
 /* =====================================================
    INIT
 ===================================================== */
@@ -7375,7 +7484,6 @@ function renderReactionStage() {
 loadState();
 
 createParticles();
-
 
 
 

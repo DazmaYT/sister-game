@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Operator Panel</title>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <style>
+        body {
+            margin: 0;
+            padding: 30px;
+
+            background: #07050a;
+            color: #fff;
+
+            font-family: Arial, sans-serif;
+        }
+
+        h1 {
+            color: #c084fc;
+        }
+
+        #players {
+            display: grid;
+            gap: 15px;
+        }
+
+        .player {
+            padding: 20px;
+
+            background: #110b18;
+
+            border: 1px solid rgba(168,85,247,.3);
+
+            border-radius: 16px;
+
+            box-shadow:
+                0 0 25px rgba(168,85,247,.08);
+        }
+
+        .player-id {
+            color: #c084fc;
+            font-weight: bold;
+        }
+
+        .stage {
+            margin-top: 10px;
+            color: #aaa;
+        }
+
+        .pending {
+            margin-top: 12px;
+
+            padding: 10px;
+
+            border-radius: 10px;
+
+            background: rgba(168,85,247,.1);
+
+            color: #d8b4fe;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h1>⚡ ПАНЕЛЬ ОПЕРАТОРА</h1>
+
+    <div id="players">
+        Загрузка игроков...
+    </div>
+
+    <script>
+
+        const SUPABASE_URL =
+            "https://yqmctiqdxcvdpharsziy.supabase.co";
+
+        const SUPABASE_KEY =
+            "sb_publishable_8esZpYy0cMumlZoseQyuXA_9iQCRZJ-";
+
+        const supabaseClient =
+            window.supabase.createClient(
+                SUPABASE_URL,
+                SUPABASE_KEY
+            );
+
+
+        async function loadPlayers() {
+
+            const {
+                data,
+                error
+            } =
+                await supabaseClient
+                    .from("players")
+                    .select("*")
+                    .order(
+                        "updated_at",
+                        {
+                            ascending: false
+                        }
+                    );
+
+
+            if (error) {
+
+                console.error(error);
+
+                document.getElementById(
+                    "players"
+                ).innerHTML =
+                    "Ошибка загрузки";
+
+                return;
+            }
+
+
+            const container =
+                document.getElementById(
+                    "players"
+                );
+
+
+            if (!data.length) {
+
+                container.innerHTML =
+                    "Игроков пока нет.";
+
+                return;
+            }
+
+
+            container.innerHTML =
+                data.map(player => {
+
+                    const pending =
+                        player.pending_operator;
+
+
+                    return `
+
+                        <div class="player">
+
+                            <div class="player-id">
+                                👤 ${player.player_id}
+                            </div>
+
+                            <div class="stage">
+                                Этап:
+                                <strong>
+                                    ${player.current_stage}
+                                </strong>
+                            </div>
+
+                            ${
+                                pending
+                                ?
+                                `
+                                <div class="pending">
+
+                                    ⏳ Ожидает оператора
+
+                                    <br><br>
+
+                                    Этап:
+                                    ${pending.stage}
+
+                                    <br>
+
+                                    Тип:
+                                    ${pending.type}
+
+                                </div>
+                                `
+                                :
+                                ""
+                            }
+
+                        </div>
+
+                    `;
+
+                }).join("");
+        }
+
+
+        loadPlayers();
+
+
+        setInterval(
+            loadPlayers,
+            3000
+        );
+
+    </script>
+
+</body>
+</html>
