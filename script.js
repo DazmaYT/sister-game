@@ -986,6 +986,47 @@ function getOperatorState() {
 }
 
 
+async function saveOperatorPlayerState() {
+
+    if (!operatorPlayerId || !operatorPlayerState) {
+        console.warn("Игрок не выбран");
+        return;
+    }
+
+    const { error } =
+        await supabaseClient
+            .from("players")
+            .update({
+                current_stage:
+                    operatorPlayerState.currentStage,
+
+                pending_operator:
+                    operatorPlayerState.pendingOperator,
+
+                state:
+                    operatorPlayerState,
+
+                updated_at:
+                    new Date().toISOString()
+            })
+            .eq(
+                "player_id",
+                operatorPlayerId
+            );
+
+    if (error) {
+        console.error(
+            "Ошибка отправки состояния:",
+            error
+        );
+        return;
+    }
+
+    console.log(
+        "Состояние игрока обновлено"
+    );
+}
+
 /* =====================================================
    LOAD / SAVE
 ===================================================== */
@@ -6833,7 +6874,7 @@ function renderRPSPlayer() {
    OPERATOR NEXT
 ===================================================== */
 
-function operatorNext() {
+async function operatorNext() {
 
     const id =
         state.currentStage;
@@ -6845,6 +6886,10 @@ function operatorNext() {
     state.pendingOperator = null;
 
     completeStage(id);
+
+    await saveOperatorPlayerState();
+
+    renderOperator();
 }
 
 /* =====================================================
