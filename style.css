@@ -8096,3 +8096,188 @@ input {
     }
 
 }
+
+/* ================================
+   PLAYERS — FINAL STYLE
+================================ */
+
+#operatorPlayers {
+    width: 100%;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 12px !important;
+    margin-top: 18px !important;
+}
+
+#operatorPlayers .operator-player {
+    position: relative !important;
+
+    width: 100% !important;
+    min-height: 72px !important;
+
+    display: flex !important;
+    align-items: center !important;
+
+    padding: 14px 16px !important;
+    box-sizing: border-box !important;
+
+    border-radius: 17px !important;
+
+    border: 1px solid rgba(168, 85, 247, .22) !important;
+
+    background:
+        linear-gradient(
+            145deg,
+            #17101f 0%,
+            #0b0810 100%
+        ) !important;
+
+    color: #fff !important;
+
+    cursor: pointer !important;
+
+    text-align: left !important;
+
+    box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.03),
+        0 8px 25px rgba(0,0,0,.25) !important;
+
+    transition: all .2s ease !important;
+}
+
+#operatorPlayers .operator-player:hover {
+    transform: translateY(-2px) !important;
+
+    border-color:
+        rgba(192, 132, 252, .65) !important;
+
+    background:
+        linear-gradient(
+            145deg,
+            #21142d,
+            #0d0912
+        ) !important;
+
+    box-shadow:
+        0 10px 30px rgba(0,0,0,.45),
+        0 0 20px rgba(168,85,247,.15) !important;
+}
+
+#operatorPlayers .operator-player.selected {
+    border-color:
+        #a855f7 !important;
+
+    box-shadow:
+        0 0 20px rgba(168,85,247,.18),
+        inset 0 0 25px rgba(168,85,247,.05) !important;
+}
+
+/* статус */
+
+#operatorPlayers .operator-player-status {
+    width: 30px !important;
+    height: 30px !important;
+
+    min-width: 30px !important;
+
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+
+    margin-right: 12px !important;
+
+    border-radius: 9px !important;
+
+    color: #a855f7 !important;
+
+    background:
+        rgba(168,85,247,.10) !important;
+
+    border:
+        1px solid rgba(168,85,247,.25) !important;
+
+    font-size: 12px !important;
+}
+
+/* информация */
+
+#operatorPlayers .operator-player-info {
+    flex: 1 !important;
+
+    min-width: 0 !important;
+
+    display: flex !important;
+    flex-direction: column !important;
+
+    gap: 5px !important;
+}
+
+#operatorPlayers .operator-player-info strong {
+    display: block !important;
+
+    color: #f1eafa !important;
+
+    font-size: 13px !important;
+    font-weight: 900 !important;
+
+    letter-spacing: 1px !important;
+}
+
+#operatorPlayers .operator-player-info small {
+    display: block !important;
+
+    color: #82768e !important;
+
+    font-size: 10px !important;
+    font-weight: 700 !important;
+
+    letter-spacing: 1.5px !important;
+}
+
+/* стрелка */
+
+#operatorPlayers .operator-player > span:last-child {
+    color: #8b5cf6 !important;
+
+    font-size: 20px !important;
+
+    margin-left: 10px !important;
+
+    transition: .2s ease !important;
+}
+
+#operatorPlayers .operator-player:hover
+> span:last-child {
+
+    color: #d8b4fe !important;
+
+    transform: translateX(4px) !important;
+
+    text-shadow:
+        0 0 12px rgba(168,85,247,.7) !important;
+}
+
+/* игрок ждёт оператора */
+
+#operatorPlayers .operator-player.has-pending {
+    border-color:
+        rgba(168,85,247,.55) !important;
+
+    box-shadow:
+        0 0 22px rgba(168,85,247,.12) !important;
+}
+
+#operatorPlayers .operator-player.has-pending
+.operator-player-status {
+
+    color: #d8b4fe !important;
+
+    background:
+        rgba(168,85,247,.18) !important;
+
+    border-color:
+        rgba(192,132,252,.45) !important;
+
+    text-shadow:
+        0 0 10px rgba(192,132,252,.8) !important;
+}

@@ -757,7 +757,7 @@ let state = {
     pendingOperator: null
 };
 
-
+let playerRealtimeChannel = null;
 registerPlayer();
 /* =====================================================
    Players
@@ -814,6 +814,7 @@ async function registerPlayer() {
         data
     );
 }
+startPlayerRealtime();
 
 async function loadOperatorPlayers() {
 
@@ -988,24 +989,23 @@ function getOperatorState() {
 
 async function saveOperatorPlayerState() {
 
-    if (!operatorPlayerId || !operatorPlayerState) {
+    if (!operatorPlayerId) {
         console.warn("Игрок не выбран");
         return;
     }
+
+    const playerState =
+        operatorPlayerState || state;
 
     const { error } =
         await supabaseClient
             .from("players")
             .update({
+                state: playerState,
                 current_stage:
-                    operatorPlayerState.currentStage,
-
+                    playerState.currentStage,
                 pending_operator:
-                    operatorPlayerState.pendingOperator,
-
-                state:
-                    operatorPlayerState,
-
+                    playerState.pendingOperator,
                 updated_at:
                     new Date().toISOString()
             })
@@ -1016,15 +1016,75 @@ async function saveOperatorPlayerState() {
 
     if (error) {
         console.error(
-            "Ошибка отправки состояния:",
+            "Ошибка синхронизации:",
             error
         );
         return;
     }
 
     console.log(
-        "Состояние игрока обновлено"
+        "✓ Отправлено игроку:",
+        playerState.currentStage
     );
+}
+
+
+function startPlayerRealtime() {
+
+    if (!state.playerId) {
+        console.warn(
+            "Нет playerId для Realtime"
+        );
+        return;
+    }
+
+    if (playerRealtimeChannel) {
+        supabaseClient.removeChannel(
+            playerRealtimeChannel
+        );
+    }
+
+    playerRealtimeChannel =
+        supabaseClient
+            .channel(
+                "player-" + state.playerId
+            )
+            .on(
+                "postgres_changes",
+                {
+                    event: "UPDATE",
+                    schema: "public",
+                    table: "players",
+                    filter:
+                        `player_id=eq.${state.playerId}`
+                },
+                payload => {
+
+                    console.log(
+                        "✓ Получено обновление:",
+                        payload.new
+                    );
+
+                    if (!payload.new.state) {
+                        return;
+                    }
+
+                    state =
+                        payload.new.state;
+
+                    saveState();
+
+                    renderPlayer();
+                }
+            )
+            .subscribe(status => {
+
+                console.log(
+                    "Player Realtime:",
+                    status
+                );
+
+            });
 }
 
 /* =====================================================
@@ -6876,12 +6936,9 @@ function renderRPSPlayer() {
 
 async function operatorNext() {
 
-    const id =
-        state.currentStage;
+    const id = state.currentStage;
 
-    if (!id) {
-        return;
-    }
+    if (!id) return;
 
     state.pendingOperator = null;
 
