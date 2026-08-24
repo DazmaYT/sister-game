@@ -756,9 +756,11 @@ let state = {
 
     pendingOperator: null
 };
+let operatorPlayerId = null;
+let operatorPlayerState = null;
 registerPlayer();
 /* =====================================================
-   REGISTER
+   Players
 ===================================================== */
 async function registerPlayer() {
 
@@ -813,6 +815,177 @@ async function registerPlayer() {
     );
 }
 
+async function loadOperatorPlayers() {
+
+    const box =
+        document.getElementById("operatorPlayers");
+
+    if (!box) return;
+
+    box.innerHTML = `
+        <div class="instruction">
+            ⏳ Загрузка игроков...
+        </div>
+    `;
+
+    const { data, error } =
+        await supabaseClient
+            .from("players")
+            .select(`
+                player_id,
+                current_stage,
+                pending_operator,
+                updated_at
+            `)
+            .order(
+                "updated_at",
+                {
+                    ascending: false
+                }
+            );
+
+    if (error) {
+
+        console.error(
+            "Ошибка загрузки игроков:",
+            error
+        );
+
+        box.innerHTML = `
+            <div class="instruction">
+                Не удалось загрузить игроков.
+            </div>
+        `;
+
+        return;
+    }
+
+    if (!data.length) {
+
+        box.innerHTML = `
+            <div class="instruction">
+                Пока нет игроков.
+            </div>
+        `;
+
+        return;
+    }
+
+    box.innerHTML =
+        data.map(player => {
+
+            const selected =
+                player.player_id ===
+                operatorPlayerId;
+
+            const pending =
+                player.pending_operator;
+
+            return `
+                <button
+                    type="button"
+                    class="operator-player
+                        ${selected ? "selected" : ""}
+                        ${pending ? "has-pending" : ""}"
+                    onclick="
+                        selectOperatorPlayer(
+                            '${player.player_id}'
+                        )
+                    "
+                >
+
+                    <span class="operator-player-status">
+                        ${pending ? "●" : "○"}
+                    </span>
+
+                    <span class="operator-player-info">
+
+                        <strong>
+                            ИГРОК
+                            ${player.player_id.slice(0, 8)}
+                        </strong>
+
+                        <small>
+                            ЭТАП ${player.current_stage}
+                        </small>
+
+                    </span>
+
+                    <span>
+                        →
+                    </span>
+
+                </button>
+            `;
+
+        }).join("");
+}
+
+async function selectOperatorPlayer(playerId) {
+
+    const { data, error } =
+        await supabaseClient
+            .from("players")
+            .select("*")
+            .eq(
+                "player_id",
+                playerId
+            )
+            .single();
+
+    if (error) {
+
+        console.error(
+            "Ошибка загрузки игрока:",
+            error
+        );
+
+        return;
+    }
+
+    operatorPlayerId =
+        playerId;
+
+    operatorPlayerState =
+        data.state;
+
+    console.log(
+        "Выбран игрок:",
+        data
+    );
+
+    peratorPlayerId = playerId;
+
+    operatorPlayerState = data.state || {};
+
+    renderOperator();
+}
+
+async function loadPlayersForOperator() {
+    const { data, error } =
+        await supabaseClient
+            .from("players")
+            .select("*")
+            .order("updated_at", {
+                ascending: false
+            });
+
+    if (error) {
+        console.error(error);
+        return;
+    }
+
+    console.log("Игроки:", data);
+}
+
+let operatorPlayerId = null;
+let operatorPlayerState = null;
+
+function getOperatorState() {
+    return operatorPlayerState || state;
+}
+
+state = operatorPlayerState;
 /* =====================================================
    LOAD / SAVE
 ===================================================== */
@@ -946,12 +1119,12 @@ function selectRole(role) {
     if (role === "operator") {
 
         document
-            .getElementById(
-                "operatorScreen"
-            )
+            .getElementById("operatorScreen")
             .classList.add("active");
 
         renderOperator();
+
+        loadOperatorPlayers();
     }
 }
 
