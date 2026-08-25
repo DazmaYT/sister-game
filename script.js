@@ -1,14 +1,4 @@
-const SUPABASE_URL =
-    "https://yqmctiqdxcvdpharsziy.supabase.co";
 
-const SUPABASE_KEY =
-    "sb_publishable_8esZpYy0cMumlZoseQyuXA_9iQCRZJ-";
-
-const supabaseClient =
-    window.supabase.createClient(
-        SUPABASE_URL,
-        SUPABASE_KEY
-    );
 
 "use strict";
 
@@ -707,10 +697,242 @@ const stages = [
     }
 ];
 
+// ==========================================
+// СИНХРОНИЗАЦИЯ ИГРОК ↔ ОПЕРАТОР
+// ==========================================
+
+const wsProtocol =
+    window.location.protocol === "https:"
+        ? "wss:"
+        : "ws:";
+
+const syncSocket = new WebSocket(
+    `${wsProtocol}//${window.location.host}`
+);
+
+let isReceivingRemoteState = false;
+let lastSentState = null;
+
+
+// ==========================================
+// ПОДКЛЮЧЕНИЕ
+// ==========================================
+
+syncSocket.addEventListener("open", () => {
+    console.log("🟢 Синхронизация подключена");
+});
+
+syncSocket.addEventListener("close", () => {
+    console.log("🔴 Синхронизация отключена");
+});
+
+syncSocket.addEventListener("error", (error) => {
+    console.error(
+        "❌ Ошибка синхронизации:",
+        error
+    );
+});
+
+
+// ==========================================
+// ПОЛУЧЕНИЕ СОСТОЯНИЯ
+// ==========================================
+
+syncSocket.addEventListener("message", async (event) => {
+
+    try {
+
+        let text;
+
+        // WebSocket может вернуть Blob
+        if (event.data instanceof Blob) {
+
+            text = await event.data.text();
+
+        } else if (event.data instanceof ArrayBuffer) {
+
+            text = new TextDecoder().decode(
+                event.data
+            );
+
+        } else {
+
+            text = event.data;
+        }
+
+
+        const message = JSON.parse(text);
+
+
+        // ==========================================
+        // ИГРОК → ОПЕРАТОР
+        // ==========================================
+
+        if (message.type === "gameState") {
+
+            // Получать состояние игрока должен оператор
+            if (currentRole !== "operator") {
+                return;
+            }
+
+            if (!message.state) {
+                return;
+            }
+
+
+            console.log(
+                "🔄 Получено состояние игрока"
+            );
+
+
+            // Сохраняем отдельную копию состояния игрока
+            operatorPlayerState = message.state;
+
+
+            // Обновляем экран оператора
+            if (typeof renderOperator === "function") {
+                renderOperator();
+            }
+
+
+            return;
+        }
+
+
+        // ==========================================
+        // ОПЕРАТОР → ИГРОК
+        // ==========================================
+
+        if (message.type === "operatorState") {
+
+            // Получать команды оператора должен игрок
+            if (currentRole !== "player") {
+                return;
+            }
+
+            if (!message.state) {
+                return;
+            }
+
+
+            console.log(
+                "🔄 Получено состояние от оператора"
+            );
+
+
+            // Пока получаем состояние,
+            // не отправляем его обратно
+            isReceivingRemoteState = true;
+
+
+            // Обновляем состояние игрока
+            state = message.state;
+
+
+            // Сохраняем локально
+            localStorage.setItem(
+                STORAGE_KEY,
+                JSON.stringify(state)
+            );
+
+
+            // Обновляем экран игрока
+            if (typeof renderPlayer === "function") {
+                renderPlayer();
+            }
+
+
+            // Даём renderPlayer закончить работу,
+            // затем снова разрешаем отправку
+            setTimeout(() => {
+                isReceivingRemoteState = false;
+            }, 100);
+
+
+            return;
+        }
+
+
+    } catch (error) {
+
+        console.error(
+            "❌ Ошибка обработки синхронизации:",
+            error
+        );
+
+    }
+
+});
+
+
+// ==========================================
+// ОТПРАВКА СОСТОЯНИЯ
+// ==========================================
+
+function sendGameState() {
+
+    // Только игрок автоматически отправляет состояние
+    if (currentRole !== "player") {
+        return;
+    }
+
+    if (isReceivingRemoteState) {
+        return;
+    }
+
+    if (syncSocket.readyState !== WebSocket.OPEN) {
+        return;
+    }
+
+    const stateString = JSON.stringify(state);
+
+    if (stateString === lastSentState) {
+        return;
+    }
+
+    lastSentState = stateString;
+
+    syncSocket.send(
+        JSON.stringify({
+            type: "gameState",
+            state: state
+        })
+    );
+
+    console.log("📤 Состояние отправлено");
+}
+
+function sendOperatorState(playerState) {
+
+    if (currentRole !== "operator") {
+        return;
+    }
+
+    if (syncSocket.readyState !== WebSocket.OPEN) {
+        console.warn(
+            "⚠️ WebSocket ещё не подключён"
+        );
+        return;
+    }
+
+    syncSocket.send(
+        JSON.stringify({
+            type: "operatorState",
+            state: playerState
+        })
+    );
+
+    console.log(
+        "📤 Оператор отправил состояние игроку"
+    );
+}
 
 /* =====================================================
    STATE
 ===================================================== */
+let currentRole = null;
+
+let operatorPlayerState = null;
 
 let state = {
 
@@ -757,350 +979,8 @@ let state = {
     pendingOperator: null
 };
 
-let playerRealtimeChannel = null;
-registerPlayer();
-/* =====================================================
-   Players
-===================================================== */
-async function registerPlayer() {
+let lastProcessedTime = 0;
 
-    let playerId =
-        localStorage.getItem("player_id");
-
-    if (!playerId) {
-
-        playerId =
-            crypto.randomUUID();
-
-        localStorage.setItem(
-            "player_id",
-            playerId
-        );
-    }
-
-    // сохраняем ID в state
-    state.playerId = playerId;
-
-    const { data, error } =
-        await supabaseClient
-            .from("players")
-            .upsert(
-                {
-                    player_id: playerId,
-
-                    current_stage:
-                        state.currentStage,
-
-                    pending_operator:
-                        state.pendingOperator,
-
-                    state: state,
-
-                    updated_at:
-                        new Date().toISOString()
-                },
-                {
-                    onConflict: "player_id"
-                }
-            )
-            .select()
-            .single();
-
-    if (error) {
-
-        console.error(
-            "Ошибка регистрации игрока:",
-            error
-        );
-
-        return;
-    }
-
-    console.log(
-        "Игрок зарегистрирован:",
-        data
-    );
-
-    saveState();
-
-    // запускаем realtime именно здесь
-    startPlayerRealtime();
-}
-
-
-async function loadOperatorPlayers() {
-
-    const box =
-        document.getElementById("operatorPlayers");
-
-    if (!box) {
-        console.error(
-            "❌ #operatorPlayers не найден"
-        );
-        return;
-    }
-
-    console.log(
-        "⏳ Загружаем игроков..."
-    );
-
-    box.innerHTML = `
-        <div class="instruction">
-            ⏳ Загрузка игроков...
-        </div>
-    `;
-
-    const { data, error } =
-        await supabaseClient
-            .from("players")
-            .select("*")
-            .order(
-                "updated_at",
-                {
-                    ascending: false
-                }
-            );
-
-    console.log(
-        "PLAYERS DATA:",
-        data
-    );
-
-    console.log(
-        "PLAYERS ERROR:",
-        error
-    );
-
-    if (error) {
-
-        box.innerHTML = `
-            <div class="instruction">
-                ❌ Ошибка загрузки игроков
-                <br><br>
-                ${error.message}
-            </div>
-        `;
-
-        return;
-    }
-
-    if (!data || !data.length) {
-
-        box.innerHTML = `
-            <div class="instruction">
-                Игроков пока нет.
-            </div>
-        `;
-
-        return;
-    }
-
-    box.innerHTML =
-        data.map(player => {
-
-            return `
-                <button
-                    type="button"
-                    class="operator-player"
-                    onclick="
-                        selectOperatorPlayer(
-                            '${player.player_id}'
-                        )
-                    "
-                >
-
-                    <span class="operator-player-status">
-                        ●
-                    </span>
-
-                    <span class="operator-player-info">
-
-                        <strong>
-                            ИГРОК
-                            ${String(
-                                player.player_id
-                            ).slice(0, 8)}
-                        </strong>
-
-                        <small>
-                            ЭТАП
-                            ${player.current_stage}
-                        </small>
-
-                    </span>
-
-                    <span>→</span>
-
-                </button>
-            `;
-
-        }).join("");
-}
-
-async function selectOperatorPlayer(playerId) {
-
-    console.log("Выбираем игрока:", playerId);
-
-    const { data, error } =
-        await supabaseClient
-            .from("players")
-            .select("*")
-            .eq("player_id", playerId)
-            .single();
-
-    if (error) {
-
-        console.error(
-            "❌ Ошибка загрузки игрока:",
-            error
-        );
-
-        return;
-    }
-
-    // ВАЖНО
-    operatorPlayerId = playerId;
-
-    operatorPlayerState =
-        data.state || {};
-
-    console.log(
-        "✓ Игрок выбран:",
-        operatorPlayerId
-    );
-
-    console.log(
-        "✓ State игрока:",
-        operatorPlayerState
-    );
-
-    renderOperator();
-}
-
-async function loadPlayersForOperator() {
-    const { data, error } =
-        await supabaseClient
-            .from("players")
-            .select("*")
-            .order("updated_at", {
-                ascending: false
-            });
-
-    if (error) {
-        console.error(error);
-        return;
-    }
-
-    console.log("Игроки:", data);
-}
-
-let operatorPlayerId = null;
-let operatorPlayerState = null;
-
-function getOperatorState() {
-    return operatorPlayerState || state;
-}
-
-
-async function saveOperatorPlayerState() {
-
-    if (!operatorPlayerId) {
-        console.warn("Игрок не выбран");
-        return;
-    }
-
-    const playerState =
-        operatorPlayerState || state;
-
-    const { error } =
-        await supabaseClient
-            .from("players")
-            .update({
-                state: playerState,
-                current_stage:
-                    playerState.currentStage,
-                pending_operator:
-                    playerState.pendingOperator,
-                updated_at:
-                    new Date().toISOString()
-            })
-            .eq(
-                "player_id",
-                operatorPlayerId
-            );
-
-    if (error) {
-        console.error(
-            "Ошибка синхронизации:",
-            error
-        );
-        return;
-    }
-
-    console.log(
-        "✓ Отправлено игроку:",
-        playerState.currentStage
-    );
-}
-
-
-function startPlayerRealtime() {
-
-    if (!state.playerId) {
-        console.warn(
-            "Нет playerId для Realtime"
-        );
-        return;
-    }
-
-    if (playerRealtimeChannel) {
-        supabaseClient.removeChannel(
-            playerRealtimeChannel
-        );
-    }
-
-    playerRealtimeChannel =
-        supabaseClient
-            .channel(
-                "player-" + state.playerId
-            )
-            .on(
-                "postgres_changes",
-                {
-                    event: "UPDATE",
-                    schema: "public",
-                    table: "players",
-                    filter:
-                        `player_id=eq.${state.playerId}`
-                },
-                payload => {
-
-                    console.log(
-                        "✓ Получено обновление:",
-                        payload.new
-                    );
-
-                    if (!payload.new.state) {
-                        return;
-                    }
-
-                    state =
-                        payload.new.state;
-
-                    saveState();
-
-                    renderPlayer();
-                }
-            )
-            .subscribe(status => {
-
-                console.log(
-                    "Player Realtime:",
-                    status
-                );
-
-            });
-}
 
 /* =====================================================
    LOAD / SAVE
@@ -1130,52 +1010,40 @@ function loadState() {
 }
 
 
-async function saveState() {
+function resetLocalGame() {
 
-    // Старое локальное сохранение — оставляем
+    const confirmed = confirm(
+        "Сбросить игру на этом устройстве?\n\n" +
+        "Весь локальный прогресс будет удалён."
+    );
+
+    if (!confirmed) {
+        return;
+    }
+
+    // Удаляем сохранённое состояние
+    localStorage.removeItem(STORAGE_KEY);
+
+    // Если есть сохранённый ID игрока — тоже удаляем
+    localStorage.removeItem("player_id");
+
+    // Перезагружаем страницу
+    location.reload();
+}
+
+function saveState() {
+
     localStorage.setItem(
         STORAGE_KEY,
         JSON.stringify(state)
     );
 
-    // Если Supabase ещё не загрузился — не мешаем игре
-    if (!window.supabase || !supabaseClient) {
+    if (isReceivingRemoteState) {
         return;
     }
 
-    const playerId =
-        localStorage.getItem("player_id");
 
-    if (!playerId) {
-        return;
-    }
-
-    const { error } =
-        await supabaseClient
-            .from("players")
-            .update({
-                current_stage:
-                    state.currentStage,
-
-                pending_operator:
-                    state.pendingOperator,
-
-                state: state,
-
-                updated_at:
-                    new Date().toISOString()
-            })
-            .eq(
-                "player_id",
-                playerId
-            );
-
-    if (error) {
-        console.error(
-            "Ошибка синхронизации:",
-            error
-        );
-    }
+    sendGameState();
 }
 
 
@@ -1212,6 +1080,8 @@ function addLog(text) {
 
 function selectRole(role) {
 
+    currentRole = role;
+
     document
         .querySelectorAll(".screen")
         .forEach(
@@ -1240,7 +1110,6 @@ function selectRole(role) {
 
         renderOperator();
 
-        loadOperatorPlayers();
     }
 }
 
@@ -4650,6 +4519,95 @@ function renderPenaltyModal() {
     `;
 }
 
+// Функция отправки команды от оператора
+function sendOperatorAction(actionType, value) {
+    // Обновляем локальный стейт
+    if (actionType === 'stage') {
+        state.currentStage = value;
+    } else if (actionType === 'penalty') {
+        state.penalty = value;
+    }
+    
+    // Сохраняем в localStorage, чтобы сестра на другом устройстве/вкладке это увидела
+    const payload = {
+        type: actionType,
+        value: value,
+        time: Date.now() // метка времени, чтобы отловить новое событие
+    };
+    localStorage.setItem('gameSyncCommand', JSON.stringify(payload));
+
+    // Перерисовываем панель оператора, чтобы интерфейс обновился
+    renderOperator();
+}
+
+
+function startSyncListener() {
+    setInterval(() => {
+        const rawData = localStorage.getItem('gameSyncCommand');
+        if (!rawData) return;
+
+        const data = JSON.parse(rawData);
+
+        // Если команда новее, чем то, что мы уже обработали
+        if (data.time > lastProcessedTime) {
+            lastProcessedTime = data.time;
+
+            // Применяем изменения у игрока
+            if (data.type === 'stage') {
+                state.currentStage = data.value;
+                // Если сестра сейчас на экране игрока — перерисовываем игру
+                if (typeof renderPlayer === 'function') {
+                    renderPlayer();
+                }
+            } else if (data.type === 'penalty') {
+                state.penalty = data.value;
+                // Показываем уведомление или модалку штрафа у сестры
+                alert(`⚠️ Внимание! Штраф от оператора: ${data.value}`);
+            }
+        }
+    }, 500); // Проверяем каждые полсекунды
+}
+
+async function operatorSendUpdate(newStage, newPenalty) {
+    try {
+        await fetch('/api/update-state', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                currentStage: newStage,
+                penalty: newPenalty
+            })
+        });
+        console.log('Команда отправлена на сервер!');
+    } catch (e) {
+        console.error('Ошибка связи с сервером', e);
+    }
+}
+
+function startPlayerSync() {
+    setInterval(async () => {
+        try {
+            let response = await fetch('/api/get-state');
+            let serverState = await response.json();
+
+            // Если этап на сервере отличается от того, что сейчас на экране у игрока
+            if (serverState.currentStage !== state.currentStage) {
+                state.currentStage = serverState.currentStage;
+                renderPlayer(); // Перерисовываем экран игрока под новый этап
+            }
+
+            // Если прилетел штраф
+            if (serverState.penalty && serverState.penalty !== state.penalty) {
+                state.penalty = serverState.penalty;
+                // Показываем модалку штрафа у сестры
+                alert("⚠️ Штраф от оператора: " + serverState.penalty);
+            }
+        } catch (e) {
+            console.log('Ожидание связи с сервером...');
+        }
+    }, 1500); // Проверять каждые 1.5 секунды
+}
+
 function closePenaltyModal() {
     const modal = document.getElementById("penaltyModal");
     if (modal) {
@@ -6951,69 +6909,61 @@ function renderRPSPlayer() {
 
 async function operatorNext() {
 
-    console.log(
-        "NEXT → игрок:",
-        operatorPlayerId
-    );
-
-    if (!operatorPlayerId) {
-
-        console.error(
-            "❌ Игрок не выбран"
+    if (currentRole !== "operator") {
+        console.warn(
+            "⚠️ operatorNext вызван не оператором"
         );
-
         return;
     }
 
-    const playerState =
-        operatorPlayerState || state;
+
+    if (!operatorPlayerState) {
+        console.warn(
+            "⚠️ Состояние игрока ещё не получено"
+        );
+        return;
+    }
+
 
     const currentStage =
-        playerState.currentStage;
+        operatorPlayerState.currentStage || 1;
 
-    playerState.pendingOperator = null;
 
-    playerState.currentStage =
+    // Меняем состояние игрока
+    operatorPlayerState.pendingOperator = null;
+
+    operatorPlayerState.currentStage =
         currentStage + 1;
 
-    operatorPlayerState =
-        playerState;
 
-    const { error } =
-        await supabaseClient
-            .from("players")
-            .update({
-                state: playerState,
+    // Синхронизируем локальный state оператора
+    state = {
+        ...operatorPlayerState
+    };
 
-                current_stage:
-                    playerState.currentStage,
 
-                pending_operator:
-                    playerState.pendingOperator,
-
-                updated_at:
-                    new Date().toISOString()
-            })
-            .eq(
-                "player_id",
-                operatorPlayerId
-            );
-
-    if (error) {
-
-        console.error(
-            "❌ Ошибка обновления:",
-            error
-        );
-
-        return;
-    }
-
-    console.log(
-        `✓ Этап ${currentStage} → ${playerState.currentStage}`
+    // Сохраняем локально
+    localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify(operatorPlayerState)
     );
 
-    renderOperator();
+
+    console.log(
+        `✓ Этап ${currentStage} → ${operatorPlayerState.currentStage}`
+    );
+
+
+    // Отправляем игроку
+    sendOperatorState(
+        operatorPlayerState
+    );
+
+
+    // Сразу обновляем интерфейс оператора
+    if (typeof renderOperator === "function") {
+        renderOperator();
+    }
 }
 
 /* =====================================================
