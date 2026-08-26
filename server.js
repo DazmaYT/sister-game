@@ -425,46 +425,78 @@ wss.on(
                     }
 
 
-                    // =====================================
-                    // ПОЛНЫЙ СБРОС ИГРЫ
-                    // =====================================
+                        // =====================================
+                        // ПОЛНЫЙ СБРОС ИГРЫ
+                        // =====================================
 
-                    if (
-                        data.type ===
-                        "resetGame"
-                    ) {
+                        if (data.type === "resetGame") {
 
-                        if (
-                            socket.role !==
-                            "operator"
-                        ) {
+                            if (socket.role !== "operator") {
 
-                            console.warn(
-                                "⚠️ resetGame пришёл не от оператора"
-                            );
+                                console.warn(
+                                    "⚠️ resetGame пришёл не от оператора"
+                                );
 
-                            return;
-                        }
+                                return;
+                            }
 
-                        try {
-
-                            gameState = null;
-
-                            await pool.query(`
-                                DELETE FROM game_state
-                                WHERE id = 1
-                            `);
 
                             console.log(
-                                "🗑️ Игра полностью удалена из PostgreSQL"
+                                "🗑️ Оператор запросил полный сброс игры"
                             );
 
-                        } catch (error) {
 
-                            console.error(
-                                "❌ Ошибка удаления игры из PostgreSQL:",
-                                error
-                            );
+                            try {
+
+                                // Удаляем состояние из памяти
+                                gameState = null;
+
+
+                                // Удаляем состояние из PostgreSQL
+                                await pool.query(`
+                                    DELETE FROM game_state
+                                    WHERE id = 1
+                                `);
+
+
+                                console.log(
+                                    "🗑️ PostgreSQL: состояние игры полностью удалено"
+                                );
+
+
+                                // Сообщаем ВСЕМ клиентам
+                                for (
+                                    const client of wss.clients
+                                ) {
+
+                                    if (
+                                        client.readyState ===
+                                        WebSocket.OPEN
+                                    ) {
+
+                                        send(
+                                            client,
+                                            {
+                                                type: "gameReset"
+                                            }
+                                        );
+                                    }
+                                }
+
+
+                                console.log(
+                                    "🔄 Всем клиентам отправлен gameReset"
+                                );
+
+
+                            } catch (error) {
+
+                                console.error(
+                                    "❌ Ошибка полного сброса:",
+                                    error
+                                );
+                            }
+
 
                             return;
                         }

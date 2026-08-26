@@ -932,6 +932,54 @@ syncSocket.addEventListener("message", async (event) => {
             return;
         }
 
+        if (message.type === "gameReset") {
+
+    console.log("🗑️ Игра полностью сброшена");
+
+    isReceivingRemoteState = true;
+
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem("player_id");
+
+    state = {
+        currentStage: 1,
+        completed: [],
+        revealedSecondPart: false,
+        qrUnlocked: false,
+        penalty: null,
+        penaltyCompleted: false,
+        routeStep: 0,
+        routeConfirmed: [],
+        timerTask: null,
+        timerSelected: false,
+        timerReady: false,
+        timerRunning: false,
+        timerFinished: false,
+        timerStartedAt: null,
+        timerOperatorResult: null,
+        timerReport: null,
+        rpsPlayer: null,
+        rpsOperator: null,
+        adultIndex: 0,
+        adultScore: 0,
+        adultFinished: false,
+        playerId: null,
+        guessNumber: null,
+        sequenceGame: null,
+        reactionGame: null,
+        cardsGameFinished: false,
+        logs: [],
+        pendingOperator: null
+    };
+
+    if (typeof timerInterval !== "undefined") {
+        clearInterval(timerInterval);
+    }
+
+    location.reload();
+
+    return;
+}
 
     } catch (error) {
 
@@ -1133,22 +1181,29 @@ function resetLocalGame() {
     // Перезагружаем страницу
     location.reload();
 }
-
 function saveState() {
 
+    // Локальное сохранение
     localStorage.setItem(
         STORAGE_KEY,
         JSON.stringify(state)
     );
 
-    if (isReceivingRemoteState) {
-        return;
+    // Отправка состояния на сервер
+    if (
+        typeof socket !== "undefined" &&
+        socket &&
+        socket.readyState === WebSocket.OPEN
+    ) {
+
+        socket.send(
+            JSON.stringify({
+                type: "operatorState",
+                state: state
+            })
+        );
     }
-
-
-    sendGameState();
 }
-
 
 /* =====================================================
    LOG
@@ -2624,9 +2679,16 @@ let timerInterval = null;
 function renderTimerStage(stage) {
 
     const box =
-        document.getElementById(
-            "stageContent"
-        );
+        document.getElementById("stageContent");
+
+    if (!box) {
+        return;
+    }
+
+
+    // =====================================================
+    // ЗАДАНИЕ ЕЩЁ НЕ ВЫБРАНО
+    // =====================================================
 
     if (!state.timerSelected) {
 
@@ -2661,10 +2723,104 @@ function renderTimerStage(stage) {
         return;
     }
 
+
     const task =
-        stage.tasks[
-            state.timerTask
-        ];
+        stage.tasks[state.timerTask];
+
+
+    if (!task) {
+        return;
+    }
+
+
+    // =====================================================
+    // ИГРОК НАЖАЛА «ГОТОВА»
+    // =====================================================
+
+    if (
+        state.timerReady &&
+        !state.timerRunning &&
+        !state.timerFinished
+    ) {
+
+        box.innerHTML = `
+
+            <div class="card">
+
+                <div class="card-label">
+                    SPEED MISSION / READY
+                </div>
+
+                <div class="answer-title">
+                    ${task.title}
+                </div>
+
+                <p>
+                    ${task.text}
+                </p>
+
+                <div class="success-box">
+
+                    ✓ ГОТОВНОСТЬ ПОДТВЕРЖДЕНА
+
+                    <br><br>
+
+                    ⏳ Ожидается запуск оператором.
+
+                </div>
+
+            </div>
+        `;
+
+        return;
+    }
+
+
+    // =====================================================
+    // ТАЙМЕР ИДЁТ
+    // =====================================================
+
+    if (state.timerRunning) {
+
+        box.innerHTML = `
+
+            <div class="card">
+
+                <div class="card-label">
+                    SPEED PROTOCOL / LIVE
+                </div>
+
+                <div class="answer-title">
+                    ${task.title}
+                </div>
+
+                <p>
+                    ${task.text}
+                </p>
+
+                <div
+                    id="timerNumber"
+                    class="timer"
+                >
+                    18
+                </div>
+
+                <div class="instruction">
+                    Выполняй задание.
+                </div>
+
+            </div>
+        `;
+
+        updateRunningTimer();
+
+        return;
+    }
+
+
+    // =====================================================
+    // ТАЙМЕР ЗАКОНЧИЛСЯ
+    // =====================================================
 
     if (state.timerFinished) {
 
@@ -2689,7 +2845,9 @@ function renderTimerStage(stage) {
                 </div>
 
                 <div class="success-box">
+
                     ⏱ Время испытания завершено.
+
                 </div>
 
                 ${
@@ -2697,15 +2855,20 @@ function renderTimerStage(stage) {
                     ?
                     `
                     <div class="instruction">
+
                         ✓ Отчёт отправлен оператору.
-                        <br>
-                        Ожидается решение.
+
+                        <br><br>
+
+                        ⏳ Ожидается решение оператора.
+
                     </div>
                     `
                     :
                     `
                     <button
                         class="main-button"
+                        type="button"
                         onclick="sendTimerReport()"
                     >
                         ОТПРАВИТЬ ОТЧЁТ →
@@ -2719,54 +2882,18 @@ function renderTimerStage(stage) {
         return;
     }
 
-    if (!state.timerRunning) {
 
-        box.innerHTML = `
-
-            <div class="card">
-
-                <div class="card-label">
-                    SPEED MISSION / 18 SEC
-                </div>
-
-                <div class="answer-title">
-                    ${task.title}
-                </div>
-
-                <p>
-                    ${task.text}
-                </p>
-
-                <div class="instruction">
-                    Подготовься.
-
-                    <br><br>
-
-                    Таймер начнётся
-                    после нажатия кнопки.
-                </div>
-
-                <br>
-
-                    <button
-                        class="main-button"
-                        onclick="timerPlayerReady()"
-                    >
-                        ГОТОВА →
-                    </button>
-
-            </div>
-        `;
-
-        return;
-    }
+    // =====================================================
+    // ЗАДАНИЕ ВЫБРАНО
+    // ЖДЁМ КНОПКУ «ГОТОВА»
+    // =====================================================
 
     box.innerHTML = `
 
         <div class="card">
 
             <div class="card-label">
-                SPEED PROTOCOL / LIVE
+                SPEED MISSION / 18 SEC
             </div>
 
             <div class="answer-title">
@@ -2777,21 +2904,34 @@ function renderTimerStage(stage) {
                 ${task.text}
             </p>
 
-            <div
-                id="timerNumber"
-                class="timer"
-            >
-                18
+            <div class="instruction">
+
+                Подготовься.
+
+                <br><br>
+
+                Когда будешь готова,
+                нажми кнопку.
+
+                <br><br>
+
+                После этого оператор
+                запустит 18 секунд.
+
             </div>
 
-            <div class="instruction">
-                Выполняй задание.
-            </div>
+            <br>
+
+            <button
+                class="main-button"
+                type="button"
+                onclick="timerPlayerReady()"
+            >
+                ГОТОВА →
+            </button>
 
         </div>
     `;
-
-    updateRunningTimer();
 }
 
 function timerPlayerReady() {
@@ -2799,7 +2939,8 @@ function timerPlayerReady() {
     if (
         !state.timerSelected ||
         state.timerRunning ||
-        state.timerFinished
+        state.timerFinished ||
+        state.timerReady
     ) {
         return;
     }
@@ -2812,7 +2953,7 @@ function timerPlayerReady() {
 
     saveState();
 
-    startPlayerTimer();
+    renderPlayer();
 }
 
 function startPlayerTimer() {
@@ -5895,14 +6036,18 @@ function confirmManualPenalty() {
 }
 
 
-/* =====================================================
-   CLOSE MANUAL PENALTY MODAL
-===================================================== */
-
 function renderTimerOperatorControls() {
 
-    const stage =
-        stages[8];
+    const stage = stages[8];
+
+    if (!stage) {
+        return "";
+    }
+
+
+    // =====================================================
+    // ЗАДАНИЕ ЕЩЁ НЕ ВЫБРАНО
+    // =====================================================
 
     if (!state.timerSelected) {
 
@@ -5911,7 +6056,7 @@ function renderTimerOperatorControls() {
             <div class="operator-action">
 
                 <h3>
-                    Выбери задание
+                    ВЫБЕРИ ЗАДАНИЕ
                 </h3>
 
                 <p>
@@ -5930,18 +6075,18 @@ function renderTimerOperatorControls() {
                             class="
                                 penalty-option
                                 ${
-                                    state.timerTask ===
-                                    index
+                                    state.timerTask === index
                                         ? "selected"
                                         : ""
                                 }
                             "
-                            onclick="
-                                selectTimerTask(${index})
-                            "
+                            type="button"
+                            onclick="selectTimerTask(${index})"
                         >
+
                             ${index + 1}.
                             ${task.title}
+
                         </button>
 
                     `
@@ -5949,19 +6094,169 @@ function renderTimerOperatorControls() {
 
             </div>
         `;
+
     }
 
 
     const selectedTask =
-        stage.tasks[
-            state.timerTask
-        ];
+        stage.tasks[state.timerTask];
 
+
+    if (!selectedTask) {
+        return "";
+    }
+
+
+    // =====================================================
+    // ИГРОК НАЖАЛА «ГОТОВА»
+    // =====================================================
+
+    if (
+        state.timerReady &&
+        !state.timerRunning &&
+        !state.timerFinished
+    ) {
+
+        return `
+
+            <div class="operator-action">
+
+                <h3>
+                    ИГРОК ГОТОВ
+                </h3>
+
+                <p>
+
+                    Игрок нажала
+                    <b>«ГОТОВА»</b>.
+
+                </p>
+
+                <div class="success-box">
+
+                    ✓ МОЖНО НАЧИНАТЬ ИСПЫТАНИЕ
+
+                </div>
+
+            </div>
+
+            <br>
+
+            <button
+                class="admin-btn"
+                type="button"
+                onclick="operatorStartTimer()"
+            >
+                ▶ ЗАПУСТИТЬ 18 СЕКУНД
+            </button>
+
+            <br><br>
+
+            <button
+                class="admin-btn secondary"
+                type="button"
+                onclick="resetTimerTask()"
+            >
+                ↻ ВЫБРАТЬ ДРУГОЕ ЗАДАНИЕ
+            </button>
+
+        `;
+    }
+
+
+    // =====================================================
+    // ТАЙМЕР ИДЁТ
+    // =====================================================
+
+    if (state.timerRunning) {
+
+        return `
+
+            <div class="operator-action">
+
+                <h3>
+                    ИСПЫТАНИЕ ИДЁТ
+                </h3>
+
+                <p>
+
+                    Задание:
+
+                    <b>
+                        ${selectedTask.title}
+                    </b>
+
+                </p>
+
+                <div class="success-box">
+
+                    ● 18-СЕКУНДНОЕ ИСПЫТАНИЕ ЗАПУЩЕНО
+
+                </div>
+
+                <div class="instruction">
+
+                    Игрок выполняет задание.
+
+                </div>
+
+            </div>
+
+        `;
+    }
+
+
+    // =====================================================
+    // ТАЙМЕР ЗАКОНЧИЛСЯ,
+    // НО ОТЧЁТ ЕЩЁ НЕ ОТПРАВЛЕН
+    // =====================================================
+
+    if (
+        state.timerFinished &&
+        !state.pendingOperator
+    ) {
+
+        return `
+
+            <div class="operator-action">
+
+                <h3>
+                    ТАЙМЕР ЗАВЕРШЁН
+                </h3>
+
+                <p>
+
+                    Задание:
+
+                    <b>
+                        ${selectedTask.title}
+                    </b>
+
+                </p>
+
+                <div class="instruction">
+
+                    ⏱ 18 секунд закончились.
+
+                    <br><br>
+
+                    Ожидается отчёт игрока.
+
+                </div>
+
+            </div>
+
+        `;
+    }
+
+
+    // =====================================================
+    // ОТЧЁТ ПОЛУЧЕН
+    // =====================================================
 
     if (
         state.pendingOperator &&
-        state.pendingOperator.type ===
-            "timer"
+        state.pendingOperator.type === "timer"
     ) {
 
         return `
@@ -5973,10 +6268,13 @@ function renderTimerOperatorControls() {
                 </h3>
 
                 <p>
+
                     Задание:
+
                     <b>
                         ${selectedTask.title}
                     </b>
+
                 </p>
 
                 <div class="instruction">
@@ -5989,121 +6287,120 @@ function renderTimerOperatorControls() {
 
             </div>
 
+            <br>
+
             <button
                 class="admin-btn"
+                type="button"
                 onclick="timerDecision(true)"
             >
                 ⚡ УСПЕЛА
             </button>
 
+            <br><br>
+
             <button
                 class="admin-btn secondary"
+                type="button"
                 onclick="timerDecision(false)"
             >
                 ⏱ НЕ УСПЕЛА
             </button>
+
         `;
     }
 
+
+    // =====================================================
+    // ЗАДАНИЕ ВЫБРАНО,
+    // ЖДЁМ ГОТОВНОСТИ ИГРОКА
+    // =====================================================
 
     return `
 
         <div class="operator-action">
 
             <h3>
-                Задание выбрано
+                ЗАДАНИЕ ВЫБРАНО
             </h3>
 
             <p>
+
                 <b>
                     ${selectedTask.title}
                 </b>
+
             </p>
 
             <div class="instruction">
+
                 ${selectedTask.text}
+
             </div>
 
         </div>
 
-        ${
-            state.timerRunning
-            ?
-            `
-            <div class="success-box">
-                ● ИСПЫТАНИЕ ИДЁТ
-            </div>
-            `
-            :
-            state.timerFinished
-            ?
-            `
-            <div class="instruction">
+        <br>
 
-                ⏱ Таймер завершён.
+        <div class="success-box">
 
-                <br>
+            ✓ Задание отправлено игроку.
 
-                Ожидается отчёт игрока.
+            <br><br>
 
-            </div>
-            `
-            :
-            `
-            <div class="success-box">
+            ⏳ Ожидается нажатие
+            «ГОТОВА».
 
-                ✓ Задание отправлено игроку.
-
-                <br><br>
-
-                Игрок должна нажать
-                «ГОТОВА».
-
-            </div>
-            `
-        }
+        </div>
 
         <br>
 
         <button
             class="admin-btn secondary"
+            type="button"
             onclick="resetTimerTask()"
         >
             ↻ ВЫБРАТЬ ДРУГОЕ ЗАДАНИЕ
         </button>
+
     `;
 }
 
 
+// =====================================================
+// ОПЕРАТОР ВЫБИРАЕТ ЗАДАНИЕ
+// =====================================================
+
 function selectTimerTask(index) {
 
-    const stage =
-        stages[8];
+    const stage = stages[8];
 
-    if (!stage.tasks[index]) {
+    if (
+        !stage ||
+        !stage.tasks ||
+        !stage.tasks[index]
+    ) {
         return;
     }
 
-    state.timerTask =
-        index;
+    state.timerTask = index;
 
-    state.timerSelected =
-        true;
+    state.timerSelected = true;
 
-    state.timerReady =
-        false;
+    state.timerReady = false;
 
-    state.timerRunning =
-        false;
+    state.timerRunning = false;
 
-    state.timerFinished =
-        false;
+    state.timerFinished = false;
 
-    state.timerReport =
-        null;
+    state.timerReport = null;
 
-    state.timerOperatorResult =
-        null;
+    state.timerOperatorResult = null;
+
+    state.timerStartedAt = null;
+
+    state.pendingOperator = null;
+
 
     addLog(
         `Оператор выбрал задание скорости: ${stage.tasks[index].title}`
@@ -6112,38 +6409,78 @@ function selectTimerTask(index) {
     saveState();
 
     renderOperator();
+
+    // ВАЖНО:
+    // состояние должно уйти игроку сразу
+    // после выбора задания.
 }
 
 
-function resetTimerTask() {
+// =====================================================
+// ОПЕРАТОР ЗАПУСКАЕТ ТАЙМЕР
+// =====================================================
+function operatorStartTimer() {
 
-    clearInterval(
-        timerInterval
+    if (
+        !state.timerSelected ||
+        !state.timerReady ||
+        state.timerRunning ||
+        state.timerFinished
+    ) {
+        return;
+    }
+
+    state.timerRunning = true;
+    state.timerReady = false;
+    state.timerFinished = false;
+    state.timerReport = null;
+    state.timerStartedAt = Date.now();
+
+    addLog(
+        "Оператор запустил испытание на 18 секунд"
     );
 
-    state.timerTask =
-        null;
+    localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify(state)
+    );
 
-    state.timerSelected =
-        false;
+    sendOperatorState(state);
 
-    state.timerReady =
-        false;
+    renderOperator();
+}
 
-    state.timerRunning =
-        false;
 
-    state.timerFinished =
-        false;
+// =====================================================
+// СБРОС ВЫБРАННОГО ЗАДАНИЯ
+// =====================================================
 
-    state.timerReport =
-        null;
+function resetTimerTask() {
 
-    state.timerStartedAt =
-        null;
+    clearInterval(timerInterval);
 
-    state.pendingOperator =
-        null;
+    state.timerTask = null;
+
+    state.timerSelected = false;
+
+    state.timerReady = false;
+
+    state.timerRunning = false;
+
+    state.timerFinished = false;
+
+    state.timerReport = null;
+
+    state.timerOperatorResult = null;
+
+    state.timerStartedAt = null;
+
+    state.pendingOperator = null;
+
+
+    addLog(
+        "Оператор отменил выбранное задание скорости"
+    );
 
     saveState();
 
@@ -7070,9 +7407,42 @@ function timerDecision(success) {
     );
 
     completeStage(9);
+
+    localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify(state)
+    );
+
+    sendOperatorState(state);
+
     renderOperator();
 }
 
+function operatorStartTimer() {
+
+    if (
+        !state.timerSelected ||
+        !state.timerReady ||
+        state.timerRunning
+    ) {
+        return;
+    }
+
+    state.timerRunning = true;
+    state.timerFinished = false;
+    state.timerReport = null;
+    state.timerStartedAt = Date.now();
+
+    state.pendingOperator = null;
+
+    addLog(
+        "Оператор запустил испытание на 18 секунд"
+    );
+
+    saveState();
+
+    renderOperator();
+}
 
 /* =====================================================
    MEMORY CONFIRM
@@ -7636,46 +8006,52 @@ function renderStageList() {
    OPERATOR LOG
 ===================================================== */
 
-function renderOperatorLog() {
+function operatorReset() {
 
-    const box =
-        document.getElementById(
-            "operatorLog"
+    if (
+        !confirm(
+            "Сбросить ВЕСЬ прогресс дела №18?\n\n" +
+            "Будут удалены:\n" +
+            "• прогресс игрока\n" +
+            "• прогресс оператора\n" +
+            "• сохранение PostgreSQL\n" +
+            "• локальное сохранение\n\n" +
+            "Это действие нельзя отменить."
+        )
+    ) {
+        return;
+    }
+
+
+    // Удаляем локальное состояние
+    localStorage.removeItem(STORAGE_KEY);
+
+    // Удаляем ID игрока, если используется
+    localStorage.removeItem("player_id");
+
+
+    // Если WebSocket подключён —
+    // просим сервер удалить игру
+    if (
+        typeof socket !== "undefined" &&
+        socket &&
+        socket.readyState === WebSocket.OPEN
+    ) {
+
+        socket.send(
+            JSON.stringify({
+                type: "resetGame"
+            })
         );
-
-    if (!box) return;
-
-    if (!state.logs.length) {
-
-        box.innerHTML = `
-
-            <div class="log-item">
-                Система готова.
-            </div>
-        `;
 
         return;
     }
 
-    box.innerHTML =
-        state.logs.map(
-            item => `
 
-                <div class="log-item">
-
-                    <b>
-                        ${item.time}
-                    </b>
-
-                    —
-
-                    ${item.text}
-
-                </div>
-            `
-        ).join("");
+    // Если WebSocket ещё не подключён,
+    // просто перезагружаем страницу.
+    location.reload();
 }
-
 
 /* =====================================================
    RESET
