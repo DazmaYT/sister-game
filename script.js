@@ -715,11 +715,72 @@ let lastSentState = null;
 
 
 // ==========================================
+// ИДЕНТИФИКАЦИЯ
+// ==========================================
+
+syncSocket.addEventListener("open", () => {
+
+    console.log(
+        "🟢 Синхронизация подключена"
+    );
+
+
+    // Если роль уже выбрана —
+    // регистрируемся на сервере.
+
+    if (currentRole) {
+
+        syncSocket.send(
+            JSON.stringify({
+
+                type:
+                    "identify",
+
+                role:
+                    currentRole
+
+            })
+        );
+
+        console.log(
+            "👤 Зарегистрирован как:",
+            currentRole
+        );
+    }
+});
+
+// ==========================================
 // ПОДКЛЮЧЕНИЕ
 // ==========================================
 
 syncSocket.addEventListener("open", () => {
-    console.log("🟢 Синхронизация подключена");
+
+    console.log(
+        "🟢 Синхронизация подключена"
+    );
+
+    // Сообщаем серверу роль
+    syncSocket.send(
+        JSON.stringify({
+            type: "identify",
+            role: currentRole
+        })
+    );
+
+
+    // Если игрок — отправляем своё состояние.
+    // Сервер также сможет вернуть сохранённое.
+    if (
+        currentRole === "player" &&
+        typeof sendGameState === "function"
+    ) {
+
+        setTimeout(() => {
+
+            sendGameState();
+
+        }, 100);
+    }
 });
 
 syncSocket.addEventListener("close", () => {
@@ -871,7 +932,6 @@ syncSocket.addEventListener("message", async (event) => {
 
 function sendGameState() {
 
-    // Только игрок автоматически отправляет состояние
     if (currentRole !== "player") {
         return;
     }
@@ -895,11 +955,15 @@ function sendGameState() {
     syncSocket.send(
         JSON.stringify({
             type: "gameState",
+            playerId: state.playerId,
             state: state
         })
     );
 
-    console.log("📤 Состояние отправлено");
+    console.log(
+        "📤 Состояние отправлено:",
+        state.playerId
+    );
 }
 
 function sendOperatorState(playerState) {
@@ -921,10 +985,6 @@ function sendOperatorState(playerState) {
             state: playerState
         })
     );
-
-    console.log(
-        "📤 Оператор отправил состояние игроку"
-    );
 }
 
 /* =====================================================
@@ -933,6 +993,12 @@ function sendOperatorState(playerState) {
 let currentRole = null;
 
 let operatorPlayerState = null;
+
+console.log("Telegram:", window.Telegram);
+console.log(
+    "Telegram user:",
+    window.Telegram?.WebApp?.initDataUnsafe?.user
+);
 
 let state = {
 
@@ -978,6 +1044,24 @@ let state = {
 
     pendingOperator: null
 };
+
+// Telegram → playerId
+if (window.Telegram?.WebApp?.initDataUnsafe?.user) {
+    const tgUser = window.Telegram.WebApp.initDataUnsafe.user;
+
+    state.playerId = String(tgUser.id);
+
+    localStorage.setItem(
+        "player_id",
+        String(tgUser.id)
+    );
+
+    console.log(
+        "👤 Telegram игрок:",
+        tgUser.id,
+        tgUser.username || tgUser.first_name
+    );
+}
 
 let lastProcessedTime = 0;
 
@@ -1082,6 +1166,33 @@ function selectRole(role) {
 
     currentRole = role;
 
+    // ==========================================
+    // СООБЩАЕМ SERVER, КТО МЫ
+    // ==========================================
+
+        if (
+            syncSocket.readyState ===
+            WebSocket.OPEN
+        ) {
+
+            syncSocket.send(
+                JSON.stringify({
+
+                    type:
+                        "identify",
+
+                    role:
+                        currentRole
+
+                })
+            );
+
+            console.log(
+                "👤 Роль отправлена:",
+                currentRole
+            );
+        }
+
     document
         .querySelectorAll(".screen")
         .forEach(
@@ -1090,6 +1201,7 @@ function selectRole(role) {
                     "active"
                 )
         );
+
 
     if (role === "player") {
 
@@ -1102,14 +1214,16 @@ function selectRole(role) {
         renderPlayer();
     }
 
+
     if (role === "operator") {
 
         document
-            .getElementById("operatorScreen")
+            .getElementById(
+                "operatorScreen"
+            )
             .classList.add("active");
 
         renderOperator();
-
     }
 }
 
@@ -1754,7 +1868,7 @@ function renderQRStage(stage) {
     if (!box) return;
 
     /* =====================================================
-       СИСТЕМА ОТКРЫТА — ВВОД КОДА
+       QR УЖЕ ОТСКАНИРОВАН — ВВОД ПАРОЛЯ
     ===================================================== */
 
     if (state.qrUnlocked) {
@@ -1834,7 +1948,6 @@ function renderQRStage(stage) {
                 </div>
 
             </div>
-
         `;
 
         return;
@@ -1842,7 +1955,7 @@ function renderQRStage(stage) {
 
 
     /* =====================================================
-       QR-КОД
+       QR СКАНЕР
     ===================================================== */
 
     box.innerHTML = `
@@ -1861,42 +1974,30 @@ function renderQRStage(stage) {
                 ${stage.text}
             </p>
 
-            <div class="qr-box">
+            <div
+                id="qrReader"
+                style="
+                    width:100%;
+                    max-width:420px;
+                    margin:20px auto;
+                "
+            ></div>
 
-                <div class="qr-corner qr-corner-tl"></div>
-                <div class="qr-corner qr-corner-tr"></div>
-                <div class="qr-corner qr-corner-bl"></div>
-                <div class="qr-corner qr-corner-br"></div>
-
-                <div class="qr-pattern"></div>
-
-                <div class="qr-scan"></div>
-
-            </div>
-
-            <div class="instruction qr-instruction">
-
-                <div class="qr-instruction-title">
-                    SCAN REQUIRED
-                </div>
-
-                Наведи камеру телефона
-                на настоящий QR-код.
-
-                <br><br>
-
-                После сканирования
-                нажми кнопку ниже.
-
+            <div
+                id="qrScannerMessage"
+                class="instruction qr-instruction"
+            >
+                Нажми кнопку ниже,
+                чтобы открыть камеру.
             </div>
 
             <button
                 class="main-button qr-scan-button"
                 type="button"
-                onclick="fakeQRScan()"
+                onclick="startQRScanner()"
             >
                 <span>
-                    ✓ Я ОТСКАНИРОВАЛА QR
+                    📷 ОТКРЫТЬ СКАНЕР
                 </span>
 
                 <span class="button-arrow">
@@ -1905,23 +2006,169 @@ function renderQRStage(stage) {
             </button>
 
         </div>
-
     `;
 }
 
+let qrScanner = null;
 
-function fakeQRScan() {
+function startQRScanner() {
 
-    state.qrUnlocked = true;
+    const reader =
+        document.getElementById("qrReader");
 
-    addLog(
-        "QR-код активирован"
-    );
+    const message =
+        document.getElementById(
+            "qrScannerMessage"
+        );
 
-    saveState();
+    if (!reader) {
+        return;
+    }
 
-    renderPlayer();
+    if (
+        typeof Html5Qrcode ===
+        "undefined"
+    ) {
+
+        alert(
+            "Сканер QR ещё не загрузился."
+        );
+
+        return;
+    }
+
+    if (qrScanner) {
+        return;
+    }
+
+    if (message) {
+
+        message.innerHTML = `
+            📷 Наведи камеру
+            на настоящий QR-код.
+        `;
+    }
+
+    qrScanner =
+        new Html5Qrcode("qrReader");
+
+    qrScanner.start(
+
+        {
+            facingMode: "environment"
+        },
+
+        {
+            fps: 10,
+            qrbox: {
+                width: 250,
+                height: 250
+            }
+        },
+
+        decodedText => {
+
+            console.log(
+                "QR найден:",
+                decodedText
+            );
+
+            handleQRScan(
+                decodedText
+            );
+
+        },
+
+        errorMessage => {
+
+            // Ничего не делаем.
+            // Эта функция вызывается постоянно,
+            // пока QR не найден.
+
+        }
+
+    ).catch(error => {
+
+        console.error(
+            "Ошибка запуска камеры:",
+            error
+        );
+
+        qrScanner = null;
+
+        if (message) {
+
+            message.innerHTML = `
+                ❌ Не удалось открыть камеру.
+                <br><br>
+                Разреши браузеру доступ
+                к камере и попробуй снова.
+            `;
+        }
+
+    });
 }
+
+function handleQRScan(decodedText) {
+
+    if (decodedText !== REAL_QR_CODE) {
+
+        const message =
+            document.getElementById("qrScannerMessage");
+
+        if (message) {
+            message.innerHTML = `
+                ❌ НЕВЕРНЫЙ QR-КОД
+                <br>
+                Отсканируй QR-код с предыдущего этапа.
+            `;
+        }
+
+        return;
+    }
+
+    // Правильный QR найден
+    if (qrScanner) {
+
+        qrScanner.stop()
+            .then(() => {
+                qrScanner.clear();
+                qrScanner = null;
+            })
+            .catch(() => {
+                qrScanner = null;
+            });
+    }
+
+        state.qrUnlocked = true;
+
+
+        // Сохраняем локально
+        saveState();
+
+
+        // Сразу отправляем серверу
+        if (
+            currentRole === "player" &&
+            syncSocket.readyState ===
+                WebSocket.OPEN
+        ) {
+
+            lastSentState = null;
+
+            sendGameState();
+
+            console.log(
+                "✅ QR-пройден. Состояние отправлено серверу."
+            );
+        }
+
+
+        renderPlayer();
+}
+
+const REAL_QR_CODE = "SYSTEM-18-QR";
+
 
 
 function checkQRPassword() {
@@ -4728,27 +4975,35 @@ function updateOperatorHeader() {
 ===================================================== */
 
 function renderOperatorControls() {
-    const box = document.getElementById("operatorControls");
+
+    const box =
+        document.getElementById("operatorControls");
 
     if (!box) return;
 
-    const stage = stages[state.currentStage - 1];
+    const playerState =
+        operatorPlayerState;
 
-    if (!stage) {
+    if (!playerState) {
         box.innerHTML = `
-            <div class="success-box">
-                ДЕЛО ЗАКРЫТО.
+            <div class="instruction">
+                ⏳ ОЖИДАНИЕ ПОДКЛЮЧЕНИЯ ИГРОКА
             </div>
         `;
         return;
     }
+
+    const stage =
+        stages[playerState.currentStage - 1];
+
+    if (!stage) return;
 
     // =====================================================
     // ПРЕДЫДУЩИЙ ЭТАП
     // =====================================================
 
     const previousButton =
-        state.currentStage > 1
+        playerState.currentStage > 1
             ? `
                 <button
                     class="admin-btn secondary"
@@ -4759,24 +5014,6 @@ function renderOperatorControls() {
                 </button>
             `
             : "";
-
-    // =====================================================
-    // ФИНАЛ
-    // =====================================================
-
-    if (stage.type === "final") {
-        box.innerHTML = `
-            <div class="panel-title">
-                ДЕЛО ЗАКРЫТО
-            </div>
-
-            <div class="success-box">
-                ✓ 17 игровых этапов завершены.
-            </div>
-        `;
-
-        return;
-    }
     
 
     // =====================================================
@@ -4821,6 +5058,7 @@ function renderOperatorControls() {
 
     return;
 }
+
     // =====================================================
     // ФИНАЛ
     // =====================================================
@@ -4846,89 +5084,100 @@ function renderOperatorControls() {
     // PENDING OPERATOR
     // =====================================================
 
-    if (
-        state.pendingOperator &&
-        state.pendingOperator.stage === state.currentStage
-    ) {
+if (
+    playerState.pendingOperator &&
+    playerState.pendingOperator.stage === playerState.currentStage
+) {
 
-        const pendingType =
-            state.pendingOperator.type;
+    const pendingType =
+        playerState.pendingOperator.type;
 
-        // =================================================
-        // ШТРАФ НАЗНАЧЕН
-        // =================================================
-
-        if (pendingType === "penaltyAssigned") {
-
-            box.innerHTML = `
-                <div class="panel-title">
-                    НАКАЗАНИЕ
-                </div>
-
-                <div class="operator-action">
-
-                    <h3>
-                        ⚠ НАЗНАЧЕН ШТРАФ
-                    </h3>
-
-                    <p>
-                        <b>${state.penalty || "Штраф не указан"}</b>
-                    </p>
-
-                    ${
-                        state.penaltyCompleted
-                            ? `
-                                <div class="success-box">
-                                    ✓ Игрок выполнила штраф.
-                                    <br>
-                                    <small>
-                                        Этап будет запущен заново.
-                                    </small>
-                                </div>
-
-                                <button
-                                    class="admin-btn"
-                                    type="button"
-                                    onclick="restartStageAfterPenalty()"
-                                >
-                                    ↻ НАЧАТЬ ЭТАП ЗАНОВО
-                                </button>
-                            `
-                            : `
-                                <div class="instruction">
-                                    ⏳ Ожидается выполнение штрафа игроком.
-                                </div>
-                            `
-                    }
-
-                </div>
-
-                ${previousButton}
-            `;
-
-            return;
-        }
-
-        // =================================================
-        // ОСТАЛЬНЫЕ PENDING
-        // =================================================
+    if (pendingType === "penaltyAssigned") {
 
         box.innerHTML = `
             <div class="panel-title">
-                ТРЕБУЕТСЯ ВАШЕ ДЕЙСТВИЕ
+                НАКАЗАНИЕ
             </div>
 
-            ${renderOperatorPending(stage)}
+            <div class="operator-action">
 
-            <br>
+                <h3>⚠ НАЗНАЧЕН ШТРАФ</h3>
+
+                <p>
+                    <b>${playerState.penalty || "Штраф не указан"}</b>
+                </p>
+
+                ${
+                    playerState.penaltyCompleted
+                        ? `
+                            <div class="success-box">
+                                ✓ Игрок выполнила штраф.
+                            </div>
+
+                            <button
+                                class="admin-btn"
+                                type="button"
+                                onclick="confirmPenalty()"
+                            >
+                                ✓ ПОДТВЕРДИТЬ ВЫПОЛНЕНИЕ
+                            </button>
+                        `
+                        : `
+                            <div class="instruction">
+                                ⏳ Ожидается выполнение штрафа игроком.
+                            </div>
+                        `
+                }
+
+            </div>
 
             ${previousButton}
-
-            ${globalPenaltyButtonHtml}
         `;
 
         return;
     }
+
+    if (pendingType === "penaltyCompleted") {
+
+        box.innerHTML = `
+            <div class="panel-title">
+                НАКАЗАНИЕ ВЫПОЛНЕНО
+            </div>
+
+            <div class="success-box">
+                ✓ Наказание подтверждено
+            </div>
+
+            <button
+                class="admin-btn"
+                type="button"
+                onclick="restartStageAfterPenalty()"
+            >
+                ↻ НАЧАТЬ ЭТАП ЗАНОВО
+            </button>
+
+            ${previousButton}
+        `;
+
+        return;
+    }
+
+    box.innerHTML = `
+        <div class="panel-title">
+            ТРЕБУЕТСЯ ВАШЕ ДЕЙСТВИЕ
+        </div>
+
+        ${renderOperatorPending(stage)}
+
+        <br>
+
+        ${previousButton}
+
+        ${globalPenaltyButtonHtml}
+    `;
+
+    return;
+}
 
     // =====================================================
     // TIMER — ЭТАП 9
@@ -5152,6 +5401,7 @@ if (stage.id === 12) {
     return;
 }
 
+
 function showPlayerGuessControls() {
 
     const controls =
@@ -5246,7 +5496,7 @@ window.submitPlayerGuess = function () {
     // =====================================================
 
     const isCompleted =
-        state.completed.includes(stage.id);
+        playerState.completed?.includes(stage.id);
 
     box.innerHTML = `
         <div class="panel-title">
@@ -5287,13 +5537,9 @@ window.submitPlayerGuess = function () {
 
         ${previousButton}
     `;
+
+
 }
-
-    
-/* =====================================================
-   MANUAL PENALTY MODAL
-===================================================== */
-
 /* =====================================================
    MANUAL PENALTY
 ===================================================== */
@@ -5508,31 +5754,62 @@ function sendManualPenalty() {
         return;
     }
 
-    // Сохраняем наказание
-    state.penalty = penalty;
+    if (!operatorPlayerState) {
 
-    // Игрок ещё не выполнила
-    state.penaltyCompleted = false;
+        alert(
+            "Игрок ещё не подключён."
+        );
 
-    // Отправляем наказание игроку
-    state.pendingOperator = {
+        return;
+    }
 
-        stage: state.currentStage,
 
-        type: "penaltyAssigned"
+    // ==========================================
+    // СОЗДАЁМ КОПИЮ СОСТОЯНИЯ ИГРОКА
+    // ==========================================
 
+    operatorPlayerState = {
+        ...operatorPlayerState,
+
+        penalty: penalty,
+
+        penaltyCompleted: false,
+
+        pendingOperator: {
+            stage: operatorPlayerState.currentStage,
+
+            type: "penaltyAssigned"
+        }
     };
 
-    addLog(
-        `Оператор назначил наказание: ${penalty}`
+
+    // ==========================================
+    // ЛОГ ОПЕРАТОРА
+    // ==========================================
+
+    console.log(
+        "⚠️ Назначено наказание:",
+        penalty
     );
 
-    saveState();
+
+    // ==========================================
+    // ОТПРАВЛЯЕМ ИГРОКУ
+    // ==========================================
+
+    sendOperatorState(
+        operatorPlayerState
+    );
+
+
+    // ==========================================
+    // ОБНОВЛЯЕМ ОПЕРАТОРСКИЙ ЭКРАН
+    // ==========================================
+
+    renderOperator();
+
 
     closeManualPenaltyModal();
-
-    renderPlayer();
-    renderOperator();
 }
 
 
@@ -5840,40 +6117,54 @@ function resetTimerTask() {
 ===================================================== */
 
 function renderOperatorPending(stage) {
-    const pending = state.pendingOperator;
+
+    const pending =
+        operatorPlayerState?.pendingOperator;
 
     if (!pending) {
         return "";
     }
 
+    const playerState =
+        operatorPlayerState;
+
+
     if (pending.type === "penaltyAssigned") {
+
         return `
             <div class="operator-action">
-                <h3>ШТРАФ НАЗНАЧЕН</h3>
+
+                <h3>⚠ ШТРАФ НАЗНАЧЕН</h3>
 
                 <div class="success-box">
-                    ${state.penalty}
+                    ${playerState.penalty || "Штраф не указан"}
                 </div>
 
                 <p>
                     Игрок должна выполнить штраф.
                 </p>
+
             </div>
         `;
     }
 
+
     if (pending.type === "penaltyCompleted") {
+
         return `
             <div class="operator-action">
+
                 <h3>✓ ШТРАФ ВЫПОЛНЕН</h3>
 
                 <div class="success-box">
-                    ${state.penalty}
+                    ${playerState.penalty || "Штраф"}
                 </div>
+
             </div>
 
             <button
                 class="admin-btn"
+                type="button"
                 onclick="confirmPenalty()"
             >
                 ✓ ПОДТВЕРДИТЬ ШТРАФ
@@ -5881,28 +6172,35 @@ function renderOperatorPending(stage) {
         `;
     }
 
+
     if (pending.type === "adult") {
+
         return `
             <div class="operator-action">
+
                 <h3>Тест на взрослость завершён</h3>
 
                 <p>
                     Результат:
-                    <b>${state.adultScore}/3</b>
+                    <b>${playerState.adultScore}/3</b>
                 </p>
 
                 <div class="success-box">
-                    ${Math.round(state.adultScore / 3 * 100)}%
+                    ${Math.round(
+                        playerState.adultScore / 3 * 100
+                    )}%
                 </div>
+
             </div>
 
             ${renderPenaltySelector()}
 
             ${
-                state.penalty
+                playerState.penalty
                     ? `
                         <button
                             class="admin-btn"
+                            type="button"
                             onclick="sendPenalty()"
                         >
                             НАЗНАЧИТЬ ШТРАФ
@@ -5910,6 +6208,7 @@ function renderOperatorPending(stage) {
 
                         <button
                             class="admin-btn secondary"
+                            type="button"
                             onclick="skipPenaltyAndContinue()"
                         >
                             ПРОПУСТИТЬ ШТРАФ
@@ -5920,19 +6219,26 @@ function renderOperatorPending(stage) {
         `;
     }
 
+
     if (pending.type === "route") {
+
         return `
             <div class="operator-action">
-                <h3>Точка ${pending.step + 1}</h3>
+
+                <h3>
+                    Точка ${pending.step + 1}
+                </h3>
 
                 <p>
                     Игрок утверждает,
                     что выполнила эту точку.
                 </p>
+
             </div>
 
             <button
                 class="admin-btn"
+                type="button"
                 onclick="confirmRoute()"
             >
                 ✓ ПОДТВЕРДИТЬ ТОЧКУ
@@ -5940,6 +6246,7 @@ function renderOperatorPending(stage) {
 
             <button
                 class="admin-btn secondary"
+                type="button"
                 onclick="rejectPending()"
             >
                 ✕ НЕ ПОДТВЕРЖДАТЬ
@@ -5947,19 +6254,24 @@ function renderOperatorPending(stage) {
         `;
     }
 
+
     if (pending.type === "memory") {
+
         return `
             <div class="operator-action">
+
                 <h3>Башня памяти</h3>
 
                 <p>
                     Игрок утверждает,
                     что справилась.
                 </p>
+
             </div>
 
             <button
                 class="admin-btn"
+                type="button"
                 onclick="confirmMemory()"
             >
                 ✓ ПОДТВЕРДИТЬ
@@ -5967,6 +6279,7 @@ function renderOperatorPending(stage) {
 
             <button
                 class="admin-btn secondary"
+                type="button"
                 onclick="rejectPending()"
             >
                 ✕ НЕ ПОДТВЕРЖДАТЬ
@@ -5974,30 +6287,54 @@ function renderOperatorPending(stage) {
         `;
     }
 
+
     if (pending.type === "timer") {
+
         return `
             <div class="operator-action">
+
                 <h3>Отчёт игрока</h3>
 
                 <p>
                     Игрок завершила
                     испытание на скорость.
                 </p>
+
             </div>
+
+            <button
+                class="admin-btn"
+                type="button"
+                onclick="operatorNext()"
+            >
+                ✓ ПОДТВЕРДИТЬ
+            </button>
+
+            <button
+                class="admin-btn secondary"
+                type="button"
+                onclick="rejectPending()"
+            >
+                ✕ ОТКАЗАТЬ
+            </button>
         `;
     }
 
+
     return `
         <div class="operator-action">
+
             <h3>Игрок ждёт подтверждения</h3>
 
             <p>
                 ${stage.title}
             </p>
+
         </div>
 
         <button
             class="admin-btn"
+            type="button"
             onclick="operatorNext()"
         >
             ✓ ПОДТВЕРДИТЬ ПЕРЕХОД
@@ -6005,6 +6342,7 @@ function renderOperatorPending(stage) {
 
         <button
             class="admin-btn secondary"
+            type="button"
             onclick="rejectPending()"
         >
             ✕ ОТКАЗАТЬ
@@ -6452,6 +6790,7 @@ function renderPenaltyPlayer() {
 
 
 function penaltyDone() {
+
     if (!state.penalty) {
         return;
     }
@@ -6463,48 +6802,60 @@ function penaltyDone() {
         type: "penaltyAssigned"
     };
 
-    addLog(
-        "Игрок отметила выполнение штрафа"
-    );
+    addLog("Игрок отметила выполнение штрафа");
 
     saveState();
 
+    // Отправляем оператору актуальное состояние
+    if (typeof sendPlayerState === "function") {
+        sendPlayerState(state);
+    }
+
     renderPlayer();
-    renderOperator();
 }
 
 function restartStageAfterPenalty() {
 
-    const id = state.currentStage;
-
-    if (!state.penaltyCompleted) {
-        alert("Игрок ещё не выполнила штраф.");
+    if (currentRole !== "operator") {
         return;
     }
 
-    // Этап не должен считаться завершённым
-    state.completed = state.completed.filter(
-        stageId => stageId !== id
+    if (!operatorPlayerState) {
+        return;
+    }
+
+    const stageId =
+        operatorPlayerState.currentStage;
+
+    // Сбрасываем именно состояние текущего этапа
+    resetCurrentStageAfterPenalty(stageId);
+
+    // Убираем штраф
+    operatorPlayerState.penalty = null;
+    operatorPlayerState.penaltyCompleted = false;
+    operatorPlayerState.pendingOperator = null;
+
+    // ЭТАП НЕ ПЕРЕКЛЮЧАЕМ
+    operatorPlayerState.currentStage = stageId;
+
+    state = {
+        ...operatorPlayerState
+    };
+
+    localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify(operatorPlayerState)
     );
 
-    // Сбрасываем состояние текущего этапа
-    resetCurrentStageAfterPenalty(id);
+    // Отправляем игроку
+    sendOperatorState(operatorPlayerState);
 
-    // Сбрасываем штраф
-    state.penalty = null;
-    state.penaltyCompleted = false;
-    state.pendingOperator = null;
-
-    addLog(
-        `Штраф выполнен. Этап ${id} начинается заново`
+    console.log(
+        `↻ Этап ${stageId} начат заново`
     );
 
-    saveState();
-
-    renderPlayer();
     renderOperator();
 }
-
 
 function resetCurrentStageAfterPenalty(stageId) {
 
@@ -6549,33 +6900,37 @@ function resetCurrentStageAfterPenalty(stageId) {
    PENALTY CONFIRM
 ===================================================== */
 function confirmPenalty() {
-    const id = state.currentStage;
 
-    // Сбрасываем состояние штрафа
-    state.pendingOperator = null;
-    state.penalty = null;
-    state.penaltyCompleted = false;
+    if (currentRole !== "operator") {
+        return;
+    }
 
-    // Этап НЕ завершаем.
-    // Вместо этого запускаем его заново.
-    resetStagesAfter(id);
+    if (!operatorPlayerState) {
+        return;
+    }
 
-    // Удаляем этот этап из завершённых,
-    // если он каким-то образом туда попал.
-    state.completed = state.completed.filter(
-        stageId => stageId !== id
+    // Игрок выполнила наказание.
+    // Оператор подтверждает его.
+    operatorPlayerState.penaltyCompleted = true;
+
+    operatorPlayerState.pendingOperator = {
+        stage: operatorPlayerState.currentStage,
+        type: "penaltyCompleted"
+    };
+
+    state = {
+        ...operatorPlayerState
+    };
+
+    localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify(operatorPlayerState)
     );
 
-    addLog(
-        `Штраф выполнен. Этап ${id} начат заново`
-    );
-
-    saveState();
+    sendOperatorState(operatorPlayerState);
 
     renderOperator();
-    renderPlayer();
 }
-
 
 function skipPenaltyAndContinue() {
 
@@ -6909,61 +7264,35 @@ function renderRPSPlayer() {
 
 async function operatorNext() {
 
-    if (currentRole !== "operator") {
-        console.warn(
-            "⚠️ operatorNext вызван не оператором"
-        );
-        return;
-    }
-
+    if (currentRole !== "operator") return;
 
     if (!operatorPlayerState) {
-        console.warn(
-            "⚠️ Состояние игрока ещё не получено"
-        );
+        console.warn("⚠️ Состояние игрока ещё не получено");
         return;
     }
-
 
     const currentStage =
         operatorPlayerState.currentStage || 1;
 
-
-    // Меняем состояние игрока
     operatorPlayerState.pendingOperator = null;
 
     operatorPlayerState.currentStage =
         currentStage + 1;
 
-
-    // Синхронизируем локальный state оператора
     state = {
         ...operatorPlayerState
     };
 
-
-    // Сохраняем локально
     localStorage.setItem(
         STORAGE_KEY,
         JSON.stringify(operatorPlayerState)
     );
 
-
-    console.log(
-        `✓ Этап ${currentStage} → ${operatorPlayerState.currentStage}`
-    );
-
-
-    // Отправляем игроку
     sendOperatorState(
         operatorPlayerState
     );
 
-
-    // Сразу обновляем интерфейс оператора
-    if (typeof renderOperator === "function") {
-        renderOperator();
-    }
+    renderOperator();
 }
 
 /* =====================================================
@@ -6972,111 +7301,53 @@ async function operatorNext() {
 
 function operatorPrevious() {
 
-    if (
-        state.currentStage <= 1
-    ) {
+    if (currentRole !== "operator") {
         return;
     }
 
-    const current =
-        state.currentStage;
+    if (!operatorPlayerState) {
+        return;
+    }
 
-    const previous =
-        current - 1;
+    const currentStage =
+        operatorPlayerState.currentStage || 1;
 
-    state.currentStage =
-        previous;
+    if (currentStage <= 1) {
+        return;
+    }
 
-    state.pendingOperator =
+    const previousStage =
+        currentStage - 1;
+
+    operatorPlayerState.currentStage =
+        previousStage;
+
+    operatorPlayerState.pendingOperator =
         null;
 
+    operatorPlayerState.penalty =
+        null;
 
-    /*
-       Не позволяем оставить
-       предыдущий этап завершённым.
-    */
+    operatorPlayerState.penaltyCompleted =
+        false;
 
-    state.completed =
-        state.completed.filter(
-            id =>
-                id < previous
-        );
+    state = {
+        ...operatorPlayerState
+    };
 
-
-    /* Сброс специальных игр */
-
-    if (previous === 7) {
-
-        state.adultIndex =
-            0;
-
-        state.adultScore =
-            0;
-
-        state.adultFinished =
-            false;
-    }
-
-
-    if (previous === 8) {
-
-        state.routeStep =
-            0;
-
-        state.routeConfirmed =
-            [];
-    }
-
-
-    if (previous === 9) {
-
-        resetTimerStateOnly();
-    }
-
-
-    if (previous === 12) {
-
-        state.rpsPlayer =
-            null;
-
-        state.rpsOperator =
-            null;
-    }
-
-
-    if (previous === 14) {
-
-        state.guessNumber =
-            null;
-    }
-
-
-    if (previous === 15) {
-
-        state.sequenceGame =
-            null;
-    }
-
-
-    if (previous === 16) {
-
-        state.reactionGame =
-            null;
-    }
-
-
-    if (previous === 17) {
-
-        state.cardsGameFinished =
-            false;
-    }
-
-
-    addLog(
-        `Оператор вернул игру с этапа ${current} на этап ${previous}`
+    localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify(operatorPlayerState)
     );
 
-    saveState();
+    // ОБЯЗАТЕЛЬНО отправляем игроку
+    sendOperatorState(
+        operatorPlayerState
+    );
+
+    console.log(
+        `← Возврат: этап ${currentStage} → ${previousStage}`
+    );
 
     renderOperator();
 }
@@ -7776,6 +8047,3 @@ function renderReactionStage() {
 loadState();
 
 createParticles();
-
-
-
