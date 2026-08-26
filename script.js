@@ -829,20 +829,75 @@ syncSocket.addEventListener("message", async (event) => {
         // ПОЛНЫЙ СБРОС ИГРЫ
         // ==========================================
 
-        if (message.type === "gameReset") {
+if (
+    message.type === "gameReset"
+) {
 
-            console.log(
-                "🗑️ Игра была полностью сброшена оператором"
-            );
+    console.log(
+        "🗑️ ПОЛУЧЕН ПОЛНЫЙ СБРОС ИГРЫ"
+    );
 
-            localStorage.removeItem(
-                STORAGE_KEY
-            );
 
-            location.reload();
+    // Остановить таймер
 
-            return;
-        }
+    if (
+        typeof timerInterval !== "undefined"
+    ) {
+
+        clearInterval(
+            timerInterval
+        );
+    }
+
+
+    // Очистить ВСЁ локальное состояние
+
+    try {
+
+        localStorage.clear();
+
+    } catch (error) {
+
+        console.error(
+            "Ошибка localStorage:",
+            error
+        );
+    }
+
+
+    try {
+
+        sessionStorage.clear();
+
+    } catch (error) {
+
+        console.error(
+            "Ошибка sessionStorage:",
+            error
+        );
+    }
+
+
+    // Сбросить переменные
+
+    isReceivingRemoteState = true;
+
+    lastSentState = null;
+
+    operatorPlayerState = null;
+
+
+    // Перезагрузить страницу
+
+    setTimeout(() => {
+
+        location.reload();
+
+    }, 100);
+
+
+    return;
+}
 
         // ==========================================
         // ИГРОК → ОПЕРАТОР
@@ -1163,53 +1218,52 @@ function loadState() {
 
 function resetLocalGame() {
 
-    console.log("🗑️ НАЧАЛО ПОЛНОГО СБРОСА");
+    console.log(
+        "🗑️ ЗАПУСК ПОЛНОГО СБРОСА ИГРЫ"
+    );
 
-    // =====================================================
-    // 1. ОЧИЩАЕМ LOCALSTORAGE
-    // =====================================================
+
+    // =====================================
+    // ОЧИСТКА БРАУЗЕРА
+    // =====================================
 
     try {
 
         localStorage.clear();
 
         console.log(
-            "✅ localStorage полностью очищен"
+            "✅ localStorage очищен"
         );
 
     } catch (error) {
 
         console.error(
-            "❌ Ошибка очистки localStorage:",
+            "❌ Ошибка localStorage:",
             error
         );
     }
 
-
-    // =====================================================
-    // 2. ОЧИЩАЕМ SESSION STORAGE
-    // =====================================================
 
     try {
 
         sessionStorage.clear();
 
         console.log(
-            "✅ sessionStorage полностью очищен"
+            "✅ sessionStorage очищен"
         );
 
     } catch (error) {
 
         console.error(
-            "❌ Ошибка очистки sessionStorage:",
+            "❌ Ошибка sessionStorage:",
             error
         );
     }
 
 
-    // =====================================================
-    // 3. ЕСЛИ МЫ ОПЕРАТОР — ГОВОРИМ СЕРВЕРУ
-    // =====================================================
+    // =====================================
+    // ОТПРАВКА RESET НА СЕРВЕР
+    // =====================================
 
     if (
         typeof syncSocket !== "undefined" &&
@@ -1217,7 +1271,7 @@ function resetLocalGame() {
     ) {
 
         console.log(
-            "📤 Отправляем серверу resetGame"
+            "📤 Отправляем resetGame на сервер"
         );
 
         syncSocket.send(
@@ -1226,82 +1280,31 @@ function resetLocalGame() {
             })
         );
 
-        // Небольшая задержка,
-        // чтобы WebSocket успел отправить команду
+
+        // Сервер должен успеть удалить
+        // PostgreSQL и отправить gameReset
 
         setTimeout(() => {
 
             location.reload();
 
-        }, 300);
+        }, 700);
+
 
         return;
     }
 
 
-    // =====================================================
-    // 4. ЕСЛИ SOCKET ЕЩЁ НЕ ПОДКЛЮЧЁН
-    // =====================================================
+    // =====================================
+    // SOCKET ЕЩЁ НЕ ГОТОВ
+    // =====================================
 
     console.warn(
         "⚠️ WebSocket ещё не подключён"
     );
 
-    // Пробуем подключиться к серверу
-    // и после подключения отправить resetGame.
 
-    if (
-        typeof syncSocket !== "undefined"
-    ) {
-
-        const resetInterval =
-            setInterval(() => {
-
-                if (
-                    syncSocket.readyState ===
-                    WebSocket.OPEN
-                ) {
-
-                    clearInterval(
-                        resetInterval
-                    );
-
-                    console.log(
-                        "📤 WebSocket подключился — отправляем resetGame"
-                    );
-
-                    syncSocket.send(
-                        JSON.stringify({
-                            type: "resetGame"
-                        })
-                    );
-
-                    setTimeout(() => {
-
-                        location.reload();
-
-                    }, 300);
-                }
-
-            }, 100);
-
-        // Через 5 секунд прекращаем ожидание
-
-        setTimeout(() => {
-
-            clearInterval(
-                resetInterval
-            );
-
-            location.reload();
-
-        }, 5000);
-
-    } else {
-
-        location.reload();
-
-    }
+    location.reload();
 }
 
 function saveState() {
@@ -5183,6 +5186,89 @@ function openPenaltyModal() {
     }
 }
 
+function renderOperatorLog() {
+
+    const container =
+        document.getElementById("operatorLog");
+
+    if (!container) {
+        return;
+    }
+
+    const sourceState =
+        operatorPlayerState ||
+        state;
+
+    const logs =
+        sourceState?.logs || [];
+
+    if (!Array.isArray(logs) || logs.length === 0) {
+
+        container.innerHTML = `
+            <div class="muted">
+                Журнал пока пуст.
+            </div>
+        `;
+
+        return;
+    }
+
+    container.innerHTML =
+        logs
+            .slice()
+            .reverse()
+            .map(log => {
+
+                // Если лог хранится обычной строкой
+                if (
+                    typeof log === "string"
+                ) {
+
+                    return `
+                        <div class="log-item">
+                            ${log}
+                        </div>
+                    `;
+                }
+
+
+                // Если лог хранится объектом
+                const text =
+                    log.text ??
+                    log.message ??
+                    log.title ??
+                    "";
+
+
+                const time =
+                    log.time ??
+                    log.timestamp ??
+                    "";
+
+
+                return `
+                    <div class="log-item">
+
+                        ${
+                            time
+                                ? `
+                                    <small>
+                                        ${time}
+                                    </small>
+                                  `
+                                : ""
+                        }
+
+                        <div>
+                            ${text}
+                        </div>
+
+                    </div>
+                `;
+
+            })
+            .join("");
+}
 
 function renderOperator() {
     updateOperatorHeader();

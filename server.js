@@ -11,7 +11,6 @@ const { Pool } = require("pg");
 
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-
     ssl: {
         rejectUnauthorized: false
     }
@@ -22,8 +21,7 @@ const pool = new Pool({
 // PORT
 // =====================================================
 
-const PORT =
-    process.env.PORT || 3000;
+const PORT = process.env.PORT || 3000;
 
 
 // =====================================================
@@ -54,27 +52,25 @@ async function initDatabase() {
         );
 
 
-        const result =
-            await pool.query(`
-                SELECT state
-                FROM game_state
-                WHERE id = 1
-            `);
+        const result = await pool.query(`
+            SELECT state
+            FROM game_state
+            WHERE id = 1
+        `);
 
 
         if (result.rows.length > 0) {
 
-            gameState =
-                result.rows[0].state;
+            gameState = result.rows[0].state;
 
             console.log(
-                "🔄 Игра загружена из PostgreSQL"
+                "🔄 Состояние игры загружено из PostgreSQL"
             );
 
         } else {
 
             console.log(
-                "📭 Сохранённой игры нет"
+                "📭 В PostgreSQL сохранённой игры нет"
             );
         }
 
@@ -84,12 +80,14 @@ async function initDatabase() {
             "❌ Ошибка PostgreSQL:",
             error
         );
+
+        throw error;
     }
 }
 
 
 // =====================================================
-// SAVE GAME
+// SAVE GAME STATE
 // =====================================================
 
 async function saveGameState() {
@@ -120,7 +118,7 @@ async function saveGameState() {
         );
 
         console.log(
-            "💾 Состояние сохранено"
+            "💾 Состояние сохранено в PostgreSQL"
         );
 
     } catch (error) {
@@ -134,134 +132,165 @@ async function saveGameState() {
 
 
 // =====================================================
+// ПОЛНЫЙ RESET DATABASE
+// =====================================================
+
+async function resetDatabase() {
+
+    console.log(
+        "🗑️ НАЧИНАЕМ ПОЛНЫЙ СБРОС"
+    );
+
+    // Сначала память сервера
+    gameState = null;
+
+    // Затем база
+    await pool.query(`
+        DELETE FROM game_state
+        WHERE id = 1
+    `);
+
+    // Дополнительно VACUUM здесь НЕ нужен:
+    // DELETE полностью удаляет запись id=1.
+
+    console.log(
+        "✅ PostgreSQL: game_state полностью очищен"
+    );
+}
+
+
+// =====================================================
 // HTTP SERVER
 // =====================================================
 
-const server =
-    http.createServer(
-        (req, res) => {
+const server = http.createServer((req, res) => {
 
-            let filePath;
+    let filePath;
+
+    try {
+
+        if (req.url === "/") {
+
+            filePath = path.join(
+                __dirname,
+                "index.html"
+            );
+
+        } else {
+
+            const requestedPath =
+                decodeURIComponent(
+                    req.url.split("?")[0]
+                );
+
+            filePath = path.join(
+                __dirname,
+                requestedPath
+            );
+        }
+
+    } catch (error) {
+
+        res.writeHead(
+            400,
+            {
+                "Content-Type":
+                    "text/plain; charset=utf-8"
+            }
+        );
+
+        res.end(
+            "Некорректный путь"
+        );
+
+        return;
+    }
 
 
-            if (req.url === "/") {
+    const ext =
+        path.extname(filePath);
 
-                filePath =
-                    path.join(
-                        __dirname,
-                        "index.html"
-                    );
 
-            } else {
+    const contentTypes = {
 
-                try {
+        ".html":
+            "text/html; charset=utf-8",
 
-                    filePath =
-                        path.join(
-                            __dirname,
-                            decodeURIComponent(
-                                req.url.split("?")[0]
-                            )
-                        );
+        ".js":
+            "text/javascript; charset=utf-8",
 
-                } catch {
+        ".css":
+            "text/css; charset=utf-8",
 
-                    res.writeHead(
-                        400,
-                        {
-                            "Content-Type":
-                                "text/plain; charset=utf-8"
-                        }
-                    );
+        ".json":
+            "application/json; charset=utf-8",
 
-                    res.end(
-                        "Некорректный путь"
-                    );
+        ".png":
+            "image/png",
 
-                    return;
-                }
+        ".jpg":
+            "image/jpeg",
+
+        ".jpeg":
+            "image/jpeg",
+
+        ".svg":
+            "image/svg+xml",
+
+        ".ico":
+            "image/x-icon"
+    };
+
+
+    const contentType =
+        contentTypes[ext] ||
+        "text/plain; charset=utf-8";
+
+
+    fs.readFile(
+        filePath,
+        (error, data) => {
+
+            if (error) {
+
+                res.writeHead(
+                    404,
+                    {
+                        "Content-Type":
+                            "text/plain; charset=utf-8"
+                    }
+                );
+
+                res.end(
+                    "Файл не найден"
+                );
+
+                return;
             }
 
 
-            const ext =
-                path.extname(filePath);
+            res.writeHead(
+                200,
+                {
+                    "Content-Type":
+                        contentType,
 
+                    "Cache-Control":
+                        "no-store, no-cache, must-revalidate, proxy-revalidate",
 
-            const contentTypes = {
+                    "Pragma":
+                        "no-cache",
 
-                ".html":
-                    "text/html; charset=utf-8",
-
-                ".js":
-                    "text/javascript; charset=utf-8",
-
-                ".css":
-                    "text/css; charset=utf-8",
-
-                ".json":
-                    "application/json; charset=utf-8",
-
-                ".png":
-                    "image/png",
-
-                ".jpg":
-                    "image/jpeg",
-
-                ".jpeg":
-                    "image/jpeg",
-
-                ".svg":
-                    "image/svg+xml",
-
-                ".ico":
-                    "image/x-icon"
-            };
-
-
-            const contentType =
-                contentTypes[ext] ||
-                "text/plain; charset=utf-8";
-
-
-            fs.readFile(
-                filePath,
-                (error, data) => {
-
-                    if (error) {
-
-                        res.writeHead(
-                            404,
-                            {
-                                "Content-Type":
-                                    "text/plain; charset=utf-8"
-                            }
-                        );
-
-                        res.end(
-                            "Файл не найден"
-                        );
-
-                        return;
-                    }
-
-
-                    res.writeHead(
-                        200,
-                        {
-                            "Content-Type":
-                                contentType,
-
-                            "Cache-Control":
-                                "no-cache, no-store, must-revalidate"
-                        }
-                    );
-
-
-                    res.end(data);
+                    "Expires":
+                        "0"
                 }
             );
+
+
+            res.end(data);
         }
     );
+});
 
 
 // =====================================================
@@ -281,19 +310,11 @@ const wss =
 function send(socket, data) {
 
     if (
-        !socket
+        !socket ||
+        socket.readyState !== WebSocket.OPEN
     ) {
         return;
     }
-
-
-    if (
-        socket.readyState !==
-        WebSocket.OPEN
-    ) {
-        return;
-    }
-
 
     try {
 
@@ -322,24 +343,18 @@ function sendToPlayer() {
     }
 
 
-    for (
-        const client of wss.clients
-    ) {
+    for (const client of wss.clients) {
 
         if (
             client.role === "player" &&
-            client.readyState ===
-                WebSocket.OPEN
+            client.readyState === WebSocket.OPEN
         ) {
 
             send(
                 client,
                 {
-                    type:
-                        "operatorState",
-
-                    state:
-                        gameState
+                    type: "operatorState",
+                    state: gameState
                 }
             );
         }
@@ -358,24 +373,18 @@ function sendToOperator() {
     }
 
 
-    for (
-        const client of wss.clients
-    ) {
+    for (const client of wss.clients) {
 
         if (
             client.role === "operator" &&
-            client.readyState ===
-                WebSocket.OPEN
+            client.readyState === WebSocket.OPEN
         ) {
 
             send(
                 client,
                 {
-                    type:
-                        "gameState",
-
-                    state:
-                        gameState
+                    type: "gameState",
+                    state: gameState
                 }
             );
         }
@@ -394,50 +403,20 @@ function sendGameReset() {
     );
 
 
-    for (
-        const client of wss.clients
-    ) {
+    for (const client of wss.clients) {
 
         if (
-            client.readyState ===
-            WebSocket.OPEN
+            client.readyState === WebSocket.OPEN
         ) {
 
             send(
                 client,
                 {
-                    type:
-                        "gameReset"
+                    type: "gameReset"
                 }
             );
         }
     }
-}
-
-
-// =====================================================
-// RESET DATABASE
-// =====================================================
-
-async function resetDatabase() {
-
-    console.log(
-        "🗑️ Удаляем состояние из PostgreSQL..."
-    );
-
-
-    gameState = null;
-
-
-    await pool.query(`
-        DELETE FROM game_state
-        WHERE id = 1
-    `);
-
-
-    console.log(
-        "✅ PostgreSQL полностью очищен"
-    );
 }
 
 
@@ -475,8 +454,7 @@ wss.on(
 
                     if (
                         !data ||
-                        typeof data.type !==
-                        "string"
+                        typeof data.type !== "string"
                     ) {
 
                         return;
@@ -494,15 +472,12 @@ wss.on(
                     // =========================================
 
                     if (
-                        data.type ===
-                        "identify"
+                        data.type === "identify"
                     ) {
 
                         if (
-                            data.role !==
-                                "player" &&
-                            data.role !==
-                                "operator"
+                            data.role !== "player" &&
+                            data.role !== "operator"
                         ) {
 
                             console.warn(
@@ -524,14 +499,20 @@ wss.on(
                         );
 
 
-                        // Отправляем текущее состояние
-                        // подключившемуся клиенту
+                        /*
+                         * ВАЖНО:
+                         *
+                         * Если gameState === null,
+                         * НИЧЕГО игроку не отправляем.
+                         *
+                         * Это означает, что после полного reset
+                         * новый игрок НЕ получит старый этап.
+                         */
 
                         if (gameState) {
 
                             if (
-                                socket.role ===
-                                "player"
+                                socket.role === "player"
                             ) {
 
                                 send(
@@ -548,8 +529,7 @@ wss.on(
 
 
                             if (
-                                socket.role ===
-                                "operator"
+                                socket.role === "operator"
                             ) {
 
                                 send(
@@ -575,20 +555,15 @@ wss.on(
                     // =========================================
 
                     if (
-                        data.type ===
-                        "resetGame"
+                        data.type === "resetGame"
                     ) {
 
-                        // Только оператор
-                        // может полностью сбрасывать игру
-
                         if (
-                            socket.role !==
-                            "operator"
+                            socket.role !== "operator"
                         ) {
 
                             console.warn(
-                                "⚠️ Попытка resetGame не оператором"
+                                "⚠️ resetGame пришёл не от оператора"
                             );
 
                             return;
@@ -596,17 +571,61 @@ wss.on(
 
 
                         console.log(
-                            "🗑️ ОПЕРАТОР НАЖАЛ СБРОС"
+                            "🗑️ ОПЕРАТОР НАЖАЛ ПОЛНЫЙ СБРОС"
                         );
 
 
                         try {
 
-                            await resetDatabase();
+                            /*
+                             * 1. Удаляем состояние
+                             *    из памяти Node.js.
+                             */
+
+                            gameState = null;
 
 
-                            // Сообщаем всем
-                            // игрокам и операторам
+                            /*
+                             * 2. Удаляем состояние
+                             *    из PostgreSQL.
+                             */
+
+                            await pool.query(`
+                                DELETE FROM game_state
+                                WHERE id = 1
+                            `);
+
+
+                            /*
+                             * 3. Проверяем,
+                             *    что запись действительно удалена.
+                             */
+
+                            const check =
+                                await pool.query(`
+                                    SELECT id
+                                    FROM game_state
+                                    WHERE id = 1
+                                `);
+
+
+                            if (check.rows.length > 0) {
+
+                                throw new Error(
+                                    "Запись game_state всё ещё существует после DELETE"
+                                );
+                            }
+
+
+                            console.log(
+                                "✅ PostgreSQL полностью очищен"
+                            );
+
+
+                            /*
+                             * 4. Отправляем reset
+                             *    ВСЕМ подключённым клиентам.
+                             */
 
                             sendGameReset();
 
@@ -623,17 +642,13 @@ wss.on(
                             );
 
 
-                            // Сообщаем оператору,
-                            // что сервер не смог удалить данные
-
                             send(
                                 socket,
                                 {
-                                    type:
-                                        "resetError",
+                                    type: "resetError",
 
                                     message:
-                                        "Не удалось очистить PostgreSQL"
+                                        "Не удалось полностью очистить игру"
                                 }
                             );
                         }
@@ -648,30 +663,30 @@ wss.on(
                     // =========================================
 
                     if (
-                        data.type ===
-                        "gameState"
+                        data.type === "gameState"
                     ) {
 
                         if (
-                            socket.role !==
-                            "player"
+                            socket.role !== "player"
                         ) {
 
                             console.warn(
-                                "⚠️ gameState не от игрока"
+                                "⚠️ gameState пришёл не от игрока"
                             );
 
                             return;
                         }
 
 
-                        if (
-                            !data.state
-                        ) {
-
+                        if (!data.state) {
                             return;
                         }
 
+
+                        /*
+                         * Если состояние уже было сброшено,
+                         * игрок может создать новое состояние.
+                         */
 
                         gameState =
                             data.state;
@@ -697,27 +712,22 @@ wss.on(
                     // =========================================
 
                     if (
-                        data.type ===
-                        "operatorState"
+                        data.type === "operatorState"
                     ) {
 
                         if (
-                            socket.role !==
-                            "operator"
+                            socket.role !== "operator"
                         ) {
 
                             console.warn(
-                                "⚠️ operatorState не от оператора"
+                                "⚠️ operatorState пришёл не от оператора"
                             );
 
                             return;
                         }
 
 
-                        if (
-                            !data.state
-                        ) {
-
+                        if (!data.state) {
                             return;
                         }
 
@@ -792,13 +802,12 @@ wss.on(
                 );
             }
         );
-
     }
 );
 
 
 // =====================================================
-// START
+// START SERVER
 // =====================================================
 
 initDatabase()
@@ -823,7 +832,6 @@ initDatabase()
                 console.log(
                     `🌐 PORT: ${PORT}`
                 );
-
             }
         );
 
