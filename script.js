@@ -1163,24 +1163,147 @@ function loadState() {
 
 function resetLocalGame() {
 
-    const confirmed = confirm(
-        "Сбросить игру на этом устройстве?\n\n" +
-        "Весь локальный прогресс будет удалён."
-    );
+    console.log("🗑️ НАЧАЛО ПОЛНОГО СБРОСА");
 
-    if (!confirmed) {
+    // =====================================================
+    // 1. ОЧИЩАЕМ LOCALSTORAGE
+    // =====================================================
+
+    try {
+
+        localStorage.clear();
+
+        console.log(
+            "✅ localStorage полностью очищен"
+        );
+
+    } catch (error) {
+
+        console.error(
+            "❌ Ошибка очистки localStorage:",
+            error
+        );
+    }
+
+
+    // =====================================================
+    // 2. ОЧИЩАЕМ SESSION STORAGE
+    // =====================================================
+
+    try {
+
+        sessionStorage.clear();
+
+        console.log(
+            "✅ sessionStorage полностью очищен"
+        );
+
+    } catch (error) {
+
+        console.error(
+            "❌ Ошибка очистки sessionStorage:",
+            error
+        );
+    }
+
+
+    // =====================================================
+    // 3. ЕСЛИ МЫ ОПЕРАТОР — ГОВОРИМ СЕРВЕРУ
+    // =====================================================
+
+    if (
+        typeof syncSocket !== "undefined" &&
+        syncSocket.readyState === WebSocket.OPEN
+    ) {
+
+        console.log(
+            "📤 Отправляем серверу resetGame"
+        );
+
+        syncSocket.send(
+            JSON.stringify({
+                type: "resetGame"
+            })
+        );
+
+        // Небольшая задержка,
+        // чтобы WebSocket успел отправить команду
+
+        setTimeout(() => {
+
+            location.reload();
+
+        }, 300);
+
         return;
     }
 
-    // Удаляем сохранённое состояние
-    localStorage.removeItem(STORAGE_KEY);
 
-    // Если есть сохранённый ID игрока — тоже удаляем
-    localStorage.removeItem("player_id");
+    // =====================================================
+    // 4. ЕСЛИ SOCKET ЕЩЁ НЕ ПОДКЛЮЧЁН
+    // =====================================================
 
-    // Перезагружаем страницу
-    location.reload();
+    console.warn(
+        "⚠️ WebSocket ещё не подключён"
+    );
+
+    // Пробуем подключиться к серверу
+    // и после подключения отправить resetGame.
+
+    if (
+        typeof syncSocket !== "undefined"
+    ) {
+
+        const resetInterval =
+            setInterval(() => {
+
+                if (
+                    syncSocket.readyState ===
+                    WebSocket.OPEN
+                ) {
+
+                    clearInterval(
+                        resetInterval
+                    );
+
+                    console.log(
+                        "📤 WebSocket подключился — отправляем resetGame"
+                    );
+
+                    syncSocket.send(
+                        JSON.stringify({
+                            type: "resetGame"
+                        })
+                    );
+
+                    setTimeout(() => {
+
+                        location.reload();
+
+                    }, 300);
+                }
+
+            }, 100);
+
+        // Через 5 секунд прекращаем ожидание
+
+        setTimeout(() => {
+
+            clearInterval(
+                resetInterval
+            );
+
+            location.reload();
+
+        }, 5000);
+
+    } else {
+
+        location.reload();
+
+    }
 }
+
 function saveState() {
 
     // Локальное сохранение

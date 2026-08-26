@@ -6,17 +6,24 @@ const { Pool } = require("pg");
 
 
 // =====================================================
-// CONFIG
+// POSTGRESQL
 // =====================================================
-
-const PORT = process.env.PORT || 3000;
 
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
+
     ssl: {
         rejectUnauthorized: false
     }
 });
+
+
+// =====================================================
+// PORT
+// =====================================================
+
+const PORT =
+    process.env.PORT || 3000;
 
 
 // =====================================================
@@ -27,7 +34,7 @@ let gameState = null;
 
 
 // =====================================================
-// POSTGRESQL
+// DATABASE INIT
 // =====================================================
 
 async function initDatabase() {
@@ -47,29 +54,29 @@ async function initDatabase() {
         );
 
 
-        const result = await pool.query(`
-            SELECT state
-            FROM game_state
-            WHERE id = 1
-        `);
+        const result =
+            await pool.query(`
+                SELECT state
+                FROM game_state
+                WHERE id = 1
+            `);
 
 
         if (result.rows.length > 0) {
 
-            gameState = result.rows[0].state;
+            gameState =
+                result.rows[0].state;
 
             console.log(
-                "🔄 Состояние игры загружено из PostgreSQL:",
-                gameState.currentStage
+                "🔄 Игра загружена из PostgreSQL"
             );
 
         } else {
 
             console.log(
-                "📭 В PostgreSQL пока нет сохранённой игры"
+                "📭 Сохранённой игры нет"
             );
         }
-
 
     } catch (error) {
 
@@ -82,7 +89,7 @@ async function initDatabase() {
 
 
 // =====================================================
-// СОХРАНЕНИЕ ИГРЫ
+// SAVE GAME
 // =====================================================
 
 async function saveGameState() {
@@ -90,7 +97,6 @@ async function saveGameState() {
     if (!gameState) {
         return;
     }
-
 
     try {
 
@@ -113,17 +119,14 @@ async function saveGameState() {
             ]
         );
 
-
         console.log(
-            "💾 Состояние сохранено в PostgreSQL:",
-            gameState.currentStage
+            "💾 Состояние сохранено"
         );
-
 
     } catch (error) {
 
         console.error(
-            "❌ Ошибка сохранения состояния:",
+            "❌ Ошибка сохранения:",
             error
         );
     }
@@ -134,100 +137,37 @@ async function saveGameState() {
 // HTTP SERVER
 // =====================================================
 
-const server = http.createServer(
-    (req, res) => {
+const server =
+    http.createServer(
+        (req, res) => {
 
-        let filePath;
+            let filePath;
 
 
-        if (req.url === "/") {
+            if (req.url === "/") {
 
-            filePath = path.join(
-                __dirname,
-                "index.html"
-            );
-
-        } else {
-
-            try {
-
-                const cleanUrl =
-                    decodeURIComponent(
-                        req.url.split("?")[0]
+                filePath =
+                    path.join(
+                        __dirname,
+                        "index.html"
                     );
 
-                filePath = path.join(
-                    __dirname,
-                    cleanUrl
-                );
+            } else {
 
-            } catch (error) {
+                try {
 
-                res.writeHead(
-                    400,
-                    {
-                        "Content-Type":
-                            "text/plain; charset=utf-8"
-                    }
-                );
+                    filePath =
+                        path.join(
+                            __dirname,
+                            decodeURIComponent(
+                                req.url.split("?")[0]
+                            )
+                        );
 
-                res.end(
-                    "Некорректный URL"
-                );
-
-                return;
-            }
-        }
-
-
-        const ext =
-            path.extname(filePath);
-
-
-        const contentTypes = {
-
-            ".html":
-                "text/html; charset=utf-8",
-
-            ".js":
-                "text/javascript; charset=utf-8",
-
-            ".css":
-                "text/css; charset=utf-8",
-
-            ".json":
-                "application/json; charset=utf-8",
-
-            ".png":
-                "image/png",
-
-            ".jpg":
-                "image/jpeg",
-
-            ".jpeg":
-                "image/jpeg",
-
-            ".svg":
-                "image/svg+xml",
-
-            ".ico":
-                "image/x-icon"
-        };
-
-
-        const contentType =
-            contentTypes[ext] ||
-            "text/plain; charset=utf-8";
-
-
-        fs.readFile(
-            filePath,
-            (error, data) => {
-
-                if (error) {
+                } catch {
 
                     res.writeHead(
-                        404,
+                        400,
                         {
                             "Content-Type":
                                 "text/plain; charset=utf-8"
@@ -235,26 +175,93 @@ const server = http.createServer(
                     );
 
                     res.end(
-                        "Файл не найден"
+                        "Некорректный путь"
                     );
 
                     return;
                 }
-
-
-                res.writeHead(
-                    200,
-                    {
-                        "Content-Type":
-                            contentType
-                    }
-                );
-
-                res.end(data);
             }
-        );
-    }
-);
+
+
+            const ext =
+                path.extname(filePath);
+
+
+            const contentTypes = {
+
+                ".html":
+                    "text/html; charset=utf-8",
+
+                ".js":
+                    "text/javascript; charset=utf-8",
+
+                ".css":
+                    "text/css; charset=utf-8",
+
+                ".json":
+                    "application/json; charset=utf-8",
+
+                ".png":
+                    "image/png",
+
+                ".jpg":
+                    "image/jpeg",
+
+                ".jpeg":
+                    "image/jpeg",
+
+                ".svg":
+                    "image/svg+xml",
+
+                ".ico":
+                    "image/x-icon"
+            };
+
+
+            const contentType =
+                contentTypes[ext] ||
+                "text/plain; charset=utf-8";
+
+
+            fs.readFile(
+                filePath,
+                (error, data) => {
+
+                    if (error) {
+
+                        res.writeHead(
+                            404,
+                            {
+                                "Content-Type":
+                                    "text/plain; charset=utf-8"
+                            }
+                        );
+
+                        res.end(
+                            "Файл не найден"
+                        );
+
+                        return;
+                    }
+
+
+                    res.writeHead(
+                        200,
+                        {
+                            "Content-Type":
+                                contentType,
+
+                            "Cache-Control":
+                                "no-cache, no-store, must-revalidate"
+                        }
+                    );
+
+
+                    res.end(data);
+                }
+            );
+        }
+    );
 
 
 // =====================================================
@@ -268,26 +275,44 @@ const wss =
 
 
 // =====================================================
-// ОТПРАВКА
+// SEND
 // =====================================================
 
 function send(socket, data) {
 
     if (
-        socket &&
-        socket.readyState ===
-            WebSocket.OPEN
+        !socket
     ) {
+        return;
+    }
+
+
+    if (
+        socket.readyState !==
+        WebSocket.OPEN
+    ) {
+        return;
+    }
+
+
+    try {
 
         socket.send(
             JSON.stringify(data)
+        );
+
+    } catch (error) {
+
+        console.error(
+            "❌ Ошибка отправки WebSocket:",
+            error
         );
     }
 }
 
 
 // =====================================================
-// ОТПРАВИТЬ ИГРОКУ
+// SEND STATE TO PLAYER
 // =====================================================
 
 function sendToPlayer() {
@@ -323,7 +348,7 @@ function sendToPlayer() {
 
 
 // =====================================================
-// ОТПРАВИТЬ ОПЕРАТОРУ
+// SEND STATE TO OPERATOR
 // =====================================================
 
 function sendToOperator() {
@@ -359,10 +384,10 @@ function sendToOperator() {
 
 
 // =====================================================
-// ОТПРАВИТЬ СБРОС ВСЕМ
+// SEND RESET TO EVERYONE
 // =====================================================
 
-function broadcastGameReset() {
+function sendGameReset() {
 
     console.log(
         "📢 Отправляем gameReset всем клиентам"
@@ -375,7 +400,7 @@ function broadcastGameReset() {
 
         if (
             client.readyState ===
-                WebSocket.OPEN
+            WebSocket.OPEN
         ) {
 
             send(
@@ -391,7 +416,33 @@ function broadcastGameReset() {
 
 
 // =====================================================
-// WEBSOCKET CONNECTION
+// RESET DATABASE
+// =====================================================
+
+async function resetDatabase() {
+
+    console.log(
+        "🗑️ Удаляем состояние из PostgreSQL..."
+    );
+
+
+    gameState = null;
+
+
+    await pool.query(`
+        DELETE FROM game_state
+        WHERE id = 1
+    `);
+
+
+    console.log(
+        "✅ PostgreSQL полностью очищен"
+    );
+}
+
+
+// =====================================================
+// CONNECTION
 // =====================================================
 
 wss.on(
@@ -422,18 +473,24 @@ wss.on(
                         );
 
 
-                    if (!data || !data.type) {
-
-                        console.warn(
-                            "⚠️ Получено некорректное сообщение"
-                        );
+                    if (
+                        !data ||
+                        typeof data.type !==
+                        "string"
+                    ) {
 
                         return;
                     }
 
 
+                    console.log(
+                        "📨 Получено:",
+                        data.type
+                    );
+
+
                     // =========================================
-                    // РЕГИСТРАЦИЯ
+                    // IDENTIFY
                     // =========================================
 
                     if (
@@ -442,8 +499,10 @@ wss.on(
                     ) {
 
                         if (
-                            data.role !== "player" &&
-                            data.role !== "operator"
+                            data.role !==
+                                "player" &&
+                            data.role !==
+                                "operator"
                         ) {
 
                             console.warn(
@@ -460,13 +519,13 @@ wss.on(
 
 
                         console.log(
-                            "👤 Клиент зарегистрирован как:",
+                            "👤 Роль:",
                             socket.role
                         );
 
 
-                        // Если игра уже есть —
-                        // сразу отправляем состояние.
+                        // Отправляем текущее состояние
+                        // подключившемуся клиенту
 
                         if (gameState) {
 
@@ -484,11 +543,6 @@ wss.on(
                                         state:
                                             gameState
                                     }
-                                );
-
-
-                                console.log(
-                                    "📤 Состояние отправлено игроку при подключении"
                                 );
                             }
 
@@ -508,11 +562,6 @@ wss.on(
                                             gameState
                                     }
                                 );
-
-
-                                console.log(
-                                    "📤 Состояние отправлено оператору при подключении"
-                                );
                             }
                         }
 
@@ -522,7 +571,80 @@ wss.on(
 
 
                     // =========================================
-                    // ИГРОК → СЕРВЕР
+                    // RESET GAME
+                    // =========================================
+
+                    if (
+                        data.type ===
+                        "resetGame"
+                    ) {
+
+                        // Только оператор
+                        // может полностью сбрасывать игру
+
+                        if (
+                            socket.role !==
+                            "operator"
+                        ) {
+
+                            console.warn(
+                                "⚠️ Попытка resetGame не оператором"
+                            );
+
+                            return;
+                        }
+
+
+                        console.log(
+                            "🗑️ ОПЕРАТОР НАЖАЛ СБРОС"
+                        );
+
+
+                        try {
+
+                            await resetDatabase();
+
+
+                            // Сообщаем всем
+                            // игрокам и операторам
+
+                            sendGameReset();
+
+
+                            console.log(
+                                "✅ ПОЛНЫЙ СБРОС ВЫПОЛНЕН"
+                            );
+
+                        } catch (error) {
+
+                            console.error(
+                                "❌ Ошибка полного сброса:",
+                                error
+                            );
+
+
+                            // Сообщаем оператору,
+                            // что сервер не смог удалить данные
+
+                            send(
+                                socket,
+                                {
+                                    type:
+                                        "resetError",
+
+                                    message:
+                                        "Не удалось очистить PostgreSQL"
+                                }
+                            );
+                        }
+
+
+                        return;
+                    }
+
+
+                    // =========================================
+                    // PLAYER → SERVER
                     // =========================================
 
                     if (
@@ -536,18 +658,16 @@ wss.on(
                         ) {
 
                             console.warn(
-                                "⚠️ gameState пришёл не от игрока"
+                                "⚠️ gameState не от игрока"
                             );
 
                             return;
                         }
 
 
-                        if (!data.state) {
-
-                            console.warn(
-                                "⚠️ gameState не содержит state"
-                            );
+                        if (
+                            !data.state
+                        ) {
 
                             return;
                         }
@@ -558,15 +678,12 @@ wss.on(
 
 
                         console.log(
-                            "📥 Получено состояние от игрока:",
-                            gameState.currentStage
+                            "🎮 Состояние игрока получено"
                         );
 
 
                         await saveGameState();
 
-
-                        // Отправляем оператору
 
                         sendToOperator();
 
@@ -576,86 +693,7 @@ wss.on(
 
 
                     // =========================================
-                    // ПОЛНЫЙ СБРОС ИГРЫ
-                    // =========================================
-
-                    if (
-                        data.type ===
-                        "resetGame"
-                    ) {
-
-                        // Только оператор имеет право
-                        // полностью сбрасывать игру.
-
-                        if (
-                            socket.role !==
-                            "operator"
-                        ) {
-
-                            console.warn(
-                                "⚠️ resetGame пришёл не от оператора"
-                            );
-
-                            return;
-                        }
-
-
-                        console.log(
-                            "🗑️ Оператор запросил полный сброс игры"
-                        );
-
-
-                        try {
-
-                            // ---------------------------------
-                            // 1. Сбрасываем память сервера
-                            // ---------------------------------
-
-                            gameState = null;
-
-
-                            // ---------------------------------
-                            // 2. Удаляем состояние PostgreSQL
-                            // ---------------------------------
-
-                            await pool.query(`
-                                DELETE FROM game_state
-                                WHERE id = 1
-                            `);
-
-
-                            console.log(
-                                "🗑️ PostgreSQL: игра полностью удалена"
-                            );
-
-
-                            // ---------------------------------
-                            // 3. Сообщаем всем клиентам
-                            // ---------------------------------
-
-                            broadcastGameReset();
-
-
-                            console.log(
-                                "✅ Полный сброс игры выполнен"
-                            );
-
-
-                        } catch (error) {
-
-                            console.error(
-                                "❌ Ошибка полного сброса:",
-                                error
-                            );
-                        }
-
-
-                        return;
-                    }
-
-
-                    // =========================================
-                    // ОПЕРАТОР → СЕРВЕР
+                    // OPERATOR → SERVER
                     // =========================================
 
                     if (
@@ -669,18 +707,16 @@ wss.on(
                         ) {
 
                             console.warn(
-                                "⚠️ operatorState пришёл не от оператора"
+                                "⚠️ operatorState не от оператора"
                             );
 
                             return;
                         }
 
 
-                        if (!data.state) {
-
-                            console.warn(
-                                "⚠️ operatorState не содержит state"
-                            );
+                        if (
+                            !data.state
+                        ) {
 
                             return;
                         }
@@ -691,17 +727,12 @@ wss.on(
 
 
                         console.log(
-                            "📥 Получено состояние от оператора:",
-                            gameState.currentStage
+                            "🖥️ Состояние изменено оператором"
                         );
 
 
-                        // Сохраняем в PostgreSQL
-
                         await saveGameState();
 
-
-                        // Отправляем игроку
 
                         sendToPlayer();
 
@@ -711,19 +742,18 @@ wss.on(
 
 
                     // =========================================
-                    // НЕИЗВЕСТНЫЙ ТИП
+                    // UNKNOWN MESSAGE
                     // =========================================
 
                     console.warn(
-                        "⚠️ Неизвестный тип сообщения:",
+                        "⚠️ Неизвестный тип:",
                         data.type
                     );
-
 
                 } catch (error) {
 
                     console.error(
-                        "❌ Ошибка обработки WebSocket сообщения:",
+                        "❌ Ошибка обработки сообщения:",
                         error
                     );
                 }
@@ -732,7 +762,7 @@ wss.on(
 
 
         // =================================================
-        // DISCONNECT
+        // CLOSE
         // =================================================
 
         socket.on(
@@ -740,7 +770,7 @@ wss.on(
             () => {
 
                 console.log(
-                    "🔴 WebSocket отключён:",
+                    "🔴 Клиент отключён:",
                     socket.role ||
                     "неизвестный"
                 );
@@ -762,45 +792,50 @@ wss.on(
                 );
             }
         );
+
     }
 );
 
 
 // =====================================================
-// ЗАПУСК
+// START
 // =====================================================
 
-async function startServer() {
+initDatabase()
+    .then(() => {
 
-    await initDatabase();
+        server.listen(
+            PORT,
+            () => {
 
+                console.log(
+                    "================================"
+                );
 
-    server.listen(
-        PORT,
-        () => {
+                console.log(
+                    "🚀 CASE18 SERVER ЗАПУЩЕН"
+                );
 
-            console.log(
-                "================================"
+                console.log(
+                    "================================"
+                );
+
+                console.log(
+                    `🌐 PORT: ${PORT}`
+                );
+
+            }
+        );
+
+    })
+    .catch(
+        (error) => {
+
+            console.error(
+                "❌ Не удалось запустить сервер:",
+                error
             );
 
-            console.log(
-                "🚀 CASE18 SERVER ЗАПУЩЕН"
-            );
-
-            console.log(
-                "================================"
-            );
-
-            console.log(
-                `🌐 PORT: ${PORT}`
-            );
-
-            console.log(
-                "🔌 WebSocket: готов"
-            );
+            process.exit(1);
         }
     );
-}
-
-
-startServer();
