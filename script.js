@@ -826,6 +826,25 @@ syncSocket.addEventListener("message", async (event) => {
 
 
         // ==========================================
+        // ПОЛНЫЙ СБРОС ИГРЫ
+        // ==========================================
+
+        if (message.type === "gameReset") {
+
+            console.log(
+                "🗑️ Игра была полностью сброшена оператором"
+            );
+
+            localStorage.removeItem(
+                STORAGE_KEY
+            );
+
+            location.reload();
+
+            return;
+        }
+
+        // ==========================================
         // ИГРОК → ОПЕРАТОР
         // ==========================================
 
@@ -2729,12 +2748,12 @@ function renderTimerStage(stage) {
 
                 <br>
 
-                <button
-                    class="main-button"
-                    onclick="startPlayerTimer()"
-                >
-                    ГОТОВА — НАЧАТЬ →
-                </button>
+                    <button
+                        class="main-button"
+                        onclick="timerPlayerReady()"
+                    >
+                        ГОТОВА →
+                    </button>
 
             </div>
         `;
@@ -2775,6 +2794,26 @@ function renderTimerStage(stage) {
     updateRunningTimer();
 }
 
+function timerPlayerReady() {
+
+    if (
+        !state.timerSelected ||
+        state.timerRunning ||
+        state.timerFinished
+    ) {
+        return;
+    }
+
+    state.timerReady = true;
+
+    addLog(
+        "Игрок нажала «ГОТОВА»"
+    );
+
+    saveState();
+
+    startPlayerTimer();
+}
 
 function startPlayerTimer() {
 
@@ -6957,30 +6996,57 @@ function skipPenaltyAndContinue() {
 
 function confirmRoute() {
 
+    if (currentRole !== "operator") {
+        return;
+    }
+
+    if (!operatorPlayerState) {
+        return;
+    }
+
+    if (
+        !operatorPlayerState.pendingOperator ||
+        operatorPlayerState.pendingOperator.type !== "route"
+    ) {
+        return;
+    }
+
     const step =
-        state.pendingOperator.step;
+        operatorPlayerState.pendingOperator.step;
 
-    state.routeConfirmed[step] =
-        true;
+    operatorPlayerState.routeConfirmed =
+        operatorPlayerState.routeConfirmed || [];
 
-    state.pendingOperator =
-        null;
+    operatorPlayerState.routeConfirmed[step] = true;
+
+    operatorPlayerState.pendingOperator = null;
 
     if (
         step <
         stages[7].steps.length - 1
     ) {
 
-        state.routeStep++;
+        operatorPlayerState.routeStep++;
 
-        saveState();
+    } else {
 
-        renderOperator();
+        operatorPlayerState.routeStep =
+            stages[7].steps.length;
 
-        return;
     }
 
-    completeStage(8);
+    state = {
+        ...operatorPlayerState
+    };
+
+    localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify(state)
+    );
+
+    sendOperatorState(
+        operatorPlayerState
+    );
 
     renderOperator();
 }
@@ -7618,13 +7684,38 @@ function renderOperatorLog() {
 function operatorReset() {
 
     if (
+        currentRole !== "operator"
+    ) {
+        return;
+    }
+
+    if (
         !confirm(
-            "Сбросить весь прогресс дела №18?"
+            "Сбросить ВЕСЬ прогресс дела №18?\n\n" +
+            "Будет удалён прогресс игрока и данные из PostgreSQL."
         )
     ) {
+        return;
+    }
+
+    if (
+        syncSocket.readyState !== WebSocket.OPEN
+    ) {
+
+        alert(
+            "Нет соединения с сервером."
+        );
 
         return;
     }
+
+    syncSocket.send(
+        JSON.stringify({
+            type: "resetGame"
+        })
+    );
+
+    // Чистим локальное состояние оператора
 
     localStorage.removeItem(
         STORAGE_KEY

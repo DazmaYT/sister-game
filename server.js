@@ -41,11 +41,75 @@ async function initDatabase() {
             "💾 PostgreSQL: таблица game_state готова"
         );
 
+
+        // Загружаем последнее состояние игры
+
+        const result = await pool.query(`
+            SELECT state
+            FROM game_state
+            WHERE id = 1
+        `);
+
+
+        if (result.rows.length > 0) {
+
+            gameState =
+                result.rows[0].state;
+
+            console.log(
+                "🔄 Состояние игры загружено из PostgreSQL:",
+                gameState.currentStage
+            );
+
+        } else {
+
+            console.log(
+                "📭 В PostgreSQL пока нет сохранённой игры"
+            );
+        }
+
+
     } catch (error) {
 
         console.error(
-            "❌ Ошибка создания таблицы PostgreSQL:",
-            error.message
+            "❌ Ошибка PostgreSQL:",
+            error
+        );
+    }
+}
+
+async function saveGameState() {
+
+    if (!gameState) {
+        return;
+    }
+
+    try {
+
+        await pool.query(`
+            INSERT INTO game_state
+                (id, state, updated_at)
+            VALUES
+                (1, $1, NOW())
+
+            ON CONFLICT (id)
+            DO UPDATE SET
+                state = EXCLUDED.state,
+                updated_at = NOW()
+        `, [
+            JSON.stringify(gameState)
+        ]);
+
+        console.log(
+            "💾 Состояние сохранено в PostgreSQL:",
+            gameState.currentStage
+        );
+
+    } catch (error) {
+
+        console.error(
+            "❌ Ошибка сохранения состояния:",
+            error
         );
     }
 }
@@ -237,17 +301,11 @@ wss.on(
             "🟢 Новое подключение"
         );
 
-
         socket.role = null;
-
-
-        // =================================================
-        // СООБЩЕНИЕ
-        // =================================================
 
         socket.on(
             "message",
-            (message) => {
+            async (message) => {
 
                 try {
 
@@ -267,10 +325,8 @@ wss.on(
                     ) {
 
                         if (
-                            data.role !==
-                                "player" &&
-                            data.role !==
-                                "operator"
+                            data.role !== "player" &&
+                            data.role !== "operator"
                         ) {
 
                             console.warn(
@@ -280,10 +336,8 @@ wss.on(
                             return;
                         }
 
-
                         socket.role =
                             data.role;
-
 
                         console.log(
                             "👤 Зарегистрирован:",
@@ -291,16 +345,11 @@ wss.on(
                         );
 
 
-                        // Если состояние уже есть —
-                        // сразу отправляем его.
-
-                        if (
-                            gameState
-                        ) {
+                        if (gameState) {
 
                             if (
                                 socket.role ===
-                                    "player"
+                                "player"
                             ) {
 
                                 send(
@@ -308,17 +357,15 @@ wss.on(
                                     {
                                         type:
                                             "operatorState",
-
                                         state:
                                             gameState
                                     }
                                 );
                             }
 
-
                             if (
                                 socket.role ===
-                                    "operator"
+                                "operator"
                             ) {
 
                                 send(
@@ -326,14 +373,12 @@ wss.on(
                                     {
                                         type:
                                             "gameState",
-
                                         state:
                                             gameState
                                     }
                                 );
                             }
                         }
-
 
                         return;
                     }
@@ -360,29 +405,91 @@ wss.on(
                             return;
                         }
 
+                        if (!data.state) {
+                            return;
+                        }
+
+                        gameState =
+                            data.state;
+
+                        console.log(
+                            "💾 Состояние игрока получено:",
+                            gameState.currentStage
+                        );
+
+                        await saveGameState();
+
+                        sendToOperator();
+
+                        return;
+                    }
+
+
+                    // =====================================
+                    // ПОЛНЫЙ СБРОС ИГРЫ
+                    // =====================================
+
+                    if (
+                        data.type ===
+                        "resetGame"
+                    ) {
 
                         if (
-                            !data.state
+                            socket.role !==
+                            "operator"
                         ) {
+
+                            console.warn(
+                                "⚠️ resetGame пришёл не от оператора"
+                            );
+
+                            return;
+                        }
+
+                        try {
+
+                            gameState = null;
+
+                            await pool.query(`
+                                DELETE FROM game_state
+                                WHERE id = 1
+                            `);
+
+                            console.log(
+                                "🗑️ Игра полностью удалена из PostgreSQL"
+                            );
+
+                        } catch (error) {
+
+                            console.error(
+                                "❌ Ошибка удаления игры из PostgreSQL:",
+                                error
+                            );
 
                             return;
                         }
 
 
-                        gameState =
-                            data.state;
+                        // Отправляем сброс всем клиентам
 
+                        for (
+                            const client of wss.clients
+                        ) {
 
-                        console.log(
-                            "💾 Состояние игрока сохранено:",
-                            gameState.currentStage
-                        );
+                            if (
+                                client.readyState ===
+                                WebSocket.OPEN
+                            ) {
 
-
-                        // Отправляем оператору
-
-                        sendToOperator();
-
+                                send(
+                                    client,
+                                    {
+                                        type:
+                                            "gameReset"
+                                    }
+                                );
+                            }
+                        }
 
                         return;
                     }
@@ -409,29 +516,21 @@ wss.on(
                             return;
                         }
 
-
-                        if (
-                            !data.state
-                        ) {
-
+                        if (!data.state) {
                             return;
                         }
 
-
                         gameState =
                             data.state;
-
 
                         console.log(
                             "💾 Оператор изменил состояние:",
                             gameState.currentStage
                         );
 
-
-                        // Отправляем игроку
+                        await saveGameState();
 
                         sendToPlayer();
-
 
                         return;
                     }
@@ -447,9 +546,9 @@ wss.on(
         );
 
 
-        // =================================================
+        // =====================================
         // ОТКЛЮЧЕНИЕ
-        // =================================================
+        // =====================================
 
         socket.on(
             "close",
@@ -457,7 +556,8 @@ wss.on(
 
                 console.log(
                     "🔴 Отключён:",
-                    socket.role || "неизвестный"
+                    socket.role ||
+                    "неизвестный"
                 );
             }
         );
@@ -473,6 +573,7 @@ wss.on(
                 );
             }
         );
+
     }
 );
 
@@ -480,26 +581,29 @@ wss.on(
 // =====================================================
 // ЗАПУСК
 // =====================================================
-initDatabase();
 
-server.listen(
-    PORT,
-    () => {
+initDatabase().then(() => {
 
-        console.log(
-            "================================"
-        );
+    server.listen(
+        PORT,
+        () => {
 
-        console.log(
-            "🚀 CASE18 SERVER ЗАПУЩЕН"
-        );
+            console.log(
+                "================================"
+            );
 
-        console.log(
-            "================================"
-        );
+            console.log(
+                "🚀 CASE18 SERVER ЗАПУЩЕН"
+            );
 
-        console.log(
-            `🌐 PORT: ${PORT}`
-        );
-    }
-);
+            console.log(
+                "================================"
+            );
+
+            console.log(
+                `🌐 PORT: ${PORT}`
+            );
+        }
+    );
+
+});
