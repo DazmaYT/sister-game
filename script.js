@@ -8549,52 +8549,7 @@ function operatorReset() {
     location.reload();
 }
 
-/* =====================================================
-   RESET
-===================================================== */
 
-function operatorReset() {
-
-    if (
-        currentRole !== "operator"
-    ) {
-        return;
-    }
-
-    if (
-        !confirm(
-            "Сбросить ВЕСЬ прогресс дела №18?\n\n" +
-            "Будет удалён прогресс игрока и данные из PostgreSQL."
-        )
-    ) {
-        return;
-    }
-
-    if (
-        syncSocket.readyState !== WebSocket.OPEN
-    ) {
-
-        alert(
-            "Нет соединения с сервером."
-        );
-
-        return;
-    }
-
-    syncSocket.send(
-        JSON.stringify({
-            type: "resetGame"
-        })
-    );
-
-    // Чистим локальное состояние оператора
-
-    localStorage.removeItem(
-        STORAGE_KEY
-    );
-
-    location.reload();
-}
 
 
 /* =====================================================
@@ -8911,25 +8866,17 @@ function setGuessNumber() {
 let memoryTimerInterval = null;
 let memoryTimeLeft = 10;
 
-
 function startMemoryTest() {
 
-    const intro =
-        document.getElementById("memoryIntro");
+    const intro = document.getElementById("memoryIntro");
+    const test = document.getElementById("memoryTest");
+    const timer = document.getElementById("memoryTimer");
+    const status = document.getElementById("memoryStatus");
+    const card = document.querySelector(".memory-card");
 
-    const test =
-        document.getElementById("memoryTest");
-
-    const timer =
-        document.getElementById("memoryTimer");
-
-    const status =
-        document.getElementById("memoryStatus");
-
-    const card =
-        document.querySelector(".memory-card");
-
-    if (!intro || !test || !timer) return;
+    if (!intro || !test || !timer) {
+        return;
+    }
 
     clearInterval(memoryTimerInterval);
 
@@ -8950,40 +8897,32 @@ function startMemoryTest() {
 
         timer.textContent = time;
 
-        if (time <= 3) {
-
-            card?.classList.add(
-                "memory-danger"
-            );
-
+        if (time <= 3 && card) {
+            card.classList.add("memory-danger");
         }
 
         if (time <= 0) {
 
-            clearInterval(
-                memoryTimerInterval
-            );
+            clearInterval(memoryTimerInterval);
+            memoryTimerInterval = null;
 
             if (status) {
-                status.textContent =
-                    "ВРЕМЯ ВЫШЛО";
+                status.textContent = "ВРЕМЯ ВЫШЛО";
             }
 
             timer.textContent = "0";
 
             const finished =
-                document.getElementById(
-                    "memoryFinished"
-                );
+                document.getElementById("memoryFinished");
 
             if (finished) {
-                finished.style.display =
-                    "block";
+                finished.style.display = "block";
             }
         }
 
     }, 1000);
 }
+
 function renderReactionStage() {
 
     const box =
