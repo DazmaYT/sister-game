@@ -1,4 +1,4 @@
-
+var currentRole = null;
 
 "use strict";
 
@@ -701,14 +701,16 @@ const stages = [
 // СИНХРОНИЗАЦИЯ ИГРОК ↔ ОПЕРАТОР
 // ==========================================
 
-const wsProtocol =
-    window.location.protocol === "https:"
-        ? "wss:"
-        : "ws:";
+const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.protocol === 'file:';
+const wsProtocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+const wsHost = (window.location.host && window.location.host !== '') ? window.location.host : 'localhost:3000';
 
-const syncSocket = new WebSocket(
-    `${wsProtocol}//${window.location.host}`
-);
+var syncSocket = null;
+try {
+    syncSocket = new WebSocket(`${wsProtocol}${wsHost}`);
+} catch (err) {
+    console.warn("WebSocket сервер недоступен, работаем локально");
+}
 
 let isReceivingRemoteState = false;
 let lastSentState = null;
@@ -934,36 +936,56 @@ if (
         }
 
 
-        // ==========================================
+       // ==========================================
         // ОПЕРАТОР → ИГРОК
         // ==========================================
        if (message.type === "operatorState") {
 
-    if (currentRole !== "player") {
-        return;
-    }
+            if (currentRole !== "player") {
+                return;
+            }
 
-    if (!message.state) {
-        return;
-    }
+            if (!message.state) {
+                return;
+            }
 
-    console.log(
-        "🔄 Получено состояние от оператора:",
-        message.state
-    );
+            console.log("🔄 Получено состояние от оператора:", message.state);
 
-    isReceivingRemoteState = true;
+            isReceivingRemoteState = true;
 
-    state = message.state;
+            // ИСПРАВЛЕНИЕ 2: Корректно объединяем стейт, сохраняя текущий этап и переданные данные
+            state = {
+                ...state,
+                ...message.state
+            };
 
-    localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify(state)
-    );
+            localStorage.setItem(
+                STORAGE_KEY,
+                JSON.stringify(state)
+            );
 
-    renderPlayer();
+            renderPlayer();
 
-    // ==========================================
+            if (
+                state.timerRunning &&
+                state.timerStartedAt
+            ) {
+                clearInterval(timerInterval);
+                timerInterval = setInterval(
+                    updateRunningTimer,
+                    100
+                );
+                updateRunningTimer();
+            }
+
+            setTimeout(() => {
+                isReceivingRemoteState = false;
+            }, 100);
+
+            return;
+        }
+
+        // ==========================================
     // ОПЕРАТОР ЗАПУСТИЛ ТАЙМЕР
     // ==========================================
 
@@ -989,98 +1011,113 @@ if (
         updateRunningTimer();
     }
 
+
+    // ==========================================
+    // GAME RESET
+    // ==========================================
+
+    if (message.type === "gameReset") {
+
+        console.log("🗑️ Игра полностью сброшена");
+
+        isReceivingRemoteState = true;
+
+        localStorage.removeItem(STORAGE_KEY);
+        localStorage.removeItem("player_id");
+
+        state = {
+            currentStage: 1,
+            completed: [],
+            revealedSecondPart: false,
+            qrUnlocked: false,
+
+            penalty: null,
+            penaltyCompleted: false,
+
+            routeStep: 0,
+            routeConfirmed: [],
+
+            timerTask: null,
+            timerSelected: false,
+            timerReady: false,
+            timerRunning: false,
+            timerFinished: false,
+            timerStartedAt: null,
+            timerOperatorResult: null,
+            timerReport: null,
+
+            rpsPlayer: null,
+            rpsOperator: null,
+
+            adultIndex: 0,
+            adultScore: 0,
+            adultFinished: false,
+
+            playerId: null,
+
+            guessNumber: null,
+            sequenceGame: null,
+            reactionGame: null,
+
+            cardsGameFinished: false,
+
+            logs: [],
+
+            pendingOperator: null
+        };
+
+
+        // Останавливаем таймер
+        if (
+            typeof timerInterval !== "undefined"
+        ) {
+            clearInterval(timerInterval);
+            timerInterval = null;
+        }
+
+
+        // Перезагружаем страницу
+        location.reload();
+
+        return;
+    }
+
+
+    // ==========================================
+    // ЗАВЕРШАЕМ ПОЛУЧЕНИЕ REMOTE STATE
+    // ==========================================
+
     setTimeout(() => {
+
         isReceivingRemoteState = false;
+
     }, 100);
 
     return;
+
+
+} catch (error) {
+
+    console.error(
+        "❌ Ошибка обработки синхронизации:",
+        error
+    );
+
 }
-
-        if (message.type === "gameReset") {
-
-    console.log("🗑️ Игра полностью сброшена");
-
-    isReceivingRemoteState = true;
-
-    localStorage.removeItem(STORAGE_KEY);
-    localStorage.removeItem("player_id");
-
-    state = {
-        currentStage: 1,
-        completed: [],
-        revealedSecondPart: false,
-        qrUnlocked: false,
-        penalty: null,
-        penaltyCompleted: false,
-        routeStep: 0,
-        routeConfirmed: [],
-        timerTask: null,
-        timerSelected: false,
-        timerReady: false,
-        timerRunning: false,
-        timerFinished: false,
-        timerStartedAt: null,
-        timerOperatorResult: null,
-        timerReport: null,
-        rpsPlayer: null,
-        rpsOperator: null,
-        adultIndex: 0,
-        adultScore: 0,
-        adultFinished: false,
-        playerId: null,
-        guessNumber: null,
-        sequenceGame: null,
-        reactionGame: null,
-        cardsGameFinished: false,
-        logs: [],
-        pendingOperator: null
-    };
-
-    if (typeof timerInterval !== "undefined") {
-        clearInterval(timerInterval);
-    }
-
-    location.reload();
-
-    return;
-}
-
-    } catch (error) {
-
-        console.error(
-            "❌ Ошибка обработки синхронизации:",
-            error
-        );
-
-    }
 
 });
-
 
 // ==========================================
 // ОТПРАВКА СОСТОЯНИЯ
 // ==========================================
 
 function sendGameState() {
-
-    if (currentRole !== "player") {
-        return;
-    }
-
-    if (isReceivingRemoteState) {
-        return;
-    }
-
-    if (syncSocket.readyState !== WebSocket.OPEN) {
-        return;
-    }
+    if (currentRole !== "player") return;
+    if (isReceivingRemoteState) return;
+    if (!syncSocket || syncSocket.readyState !== WebSocket.OPEN) return;
 
     const stateString = JSON.stringify(state);
-
-    if (stateString === lastSentState) {
-        return;
-    }
-
+    if (stateString === lastSentState) return;
     lastSentState = stateString;
 
     syncSocket.send(
@@ -1089,11 +1126,6 @@ function sendGameState() {
             playerId: state.playerId,
             state: state
         })
-    );
-
-    console.log(
-        "📤 Состояние отправлено:",
-        state.playerId
     );
 }
 
@@ -1133,7 +1165,7 @@ function sendOperatorState(playerState) {
 /* =====================================================
    STATE
 ===================================================== */
-let currentRole = null;
+
 
 let operatorPlayerState = null;
 
@@ -1238,127 +1270,51 @@ function loadState() {
 
 
 function resetLocalGame() {
+    console.log("🗑️ ЗАПУСК ПОЛНОГО СБРОСА ИГРЫ");
+    try { localStorage.clear(); } catch (e) {}
+    try { sessionStorage.clear(); } catch (e) {}
 
-    console.log(
-        "🗑️ ЗАПУСК ПОЛНОГО СБРОСА ИГРЫ"
-    );
-
-
-    // =====================================
-    // ОЧИСТКА БРАУЗЕРА
-    // =====================================
-
-    try {
-
-        localStorage.clear();
-
-        console.log(
-            "✅ localStorage очищен"
-        );
-
-    } catch (error) {
-
-        console.error(
-            "❌ Ошибка localStorage:",
-            error
-        );
-    }
-
-
-    try {
-
-        sessionStorage.clear();
-
-        console.log(
-            "✅ sessionStorage очищен"
-        );
-
-    } catch (error) {
-
-        console.error(
-            "❌ Ошибка sessionStorage:",
-            error
-        );
-    }
-
-
-    // =====================================
-    // ОТПРАВКА RESET НА СЕРВЕР
-    // =====================================
-
-    if (
-        typeof syncSocket !== "undefined" &&
-        syncSocket.readyState === WebSocket.OPEN
-    ) {
-
-        console.log(
-            "📤 Отправляем resetGame на сервер"
-        );
-
-        syncSocket.send(
-            JSON.stringify({
-                type: "resetGame"
-            })
-        );
-
-
-        // Сервер должен успеть удалить
-        // PostgreSQL и отправить gameReset
-
-        setTimeout(() => {
-
-            location.reload();
-
-        }, 700);
-
-
+    if (typeof syncSocket !== "undefined" && syncSocket.readyState === WebSocket.OPEN) {
+        syncSocket.send(JSON.stringify({ type: "resetGame" }));
+        setTimeout(() => { location.reload(); }, 700);
         return;
     }
-
-
-    // =====================================
-    // SOCKET ЕЩЁ НЕ ГОТОВ
-    // =====================================
-
-    console.warn(
-        "⚠️ WebSocket ещё не подключён"
-    );
-
-
     location.reload();
 }
 
 function saveState() {
-
     // =====================================================
     // ЛОКАЛЬНОЕ СОХРАНЕНИЕ
     // =====================================================
-
-    localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify(state)
-    );
-
+    try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    } catch (e) {
+        console.warn("Не удалось сохранить в localStorage:", e);
+    }
 
     // =====================================================
     // СИНХРОНИЗАЦИЯ С СЕРВЕРОМ
     // =====================================================
-
-    if (
-        !syncSocket ||
-        syncSocket.readyState !== WebSocket.OPEN
-    ) {
+    if (!syncSocket || syncSocket.readyState !== WebSocket.OPEN) {
         return;
     }
 
+    // Защита от отправки при получении удаленного стейта
+    if (typeof isReceivingRemoteState !== "undefined" && isReceivingRemoteState) {
+        return;
+    }
 
     // =====================================================
     // ИГРОК
     // =====================================================
-
     if (currentRole === "player") {
-
-        lastSentState = null;
+        const currentStateString = JSON.stringify(state);
+        
+        // Отправляем только если состояние реально изменилось
+        if (currentStateString === lastSentState) {
+            return;
+        }
+        lastSentState = currentStateString;
 
         syncSocket.send(
             JSON.stringify({
@@ -1368,21 +1324,14 @@ function saveState() {
             })
         );
 
-        console.log(
-            "📤 Состояние игрока отправлено серверу:",
-            state.playerId
-        );
-
+        console.log("📤 Состояние игрока отправлено серверу:", state.playerId);
         return;
     }
-
 
     // =====================================================
     // ОПЕРАТОР
     // =====================================================
-
     if (currentRole === "operator") {
-
         syncSocket.send(
             JSON.stringify({
                 type: "operatorState",
@@ -1390,9 +1339,7 @@ function saveState() {
             })
         );
 
-        console.log(
-            "📤 Состояние оператора отправлено серверу"
-        );
+        console.log("📤 Состояние оператора отправлено серверу");
     }
 }
 
@@ -1428,66 +1375,27 @@ function addLog(text) {
 ===================================================== */
 
 function selectRole(role) {
-
     currentRole = role;
 
-    // ==========================================
-    // СООБЩАЕМ SERVER, КТО МЫ
-    // ==========================================
-
-        if (
-            syncSocket.readyState ===
-            WebSocket.OPEN
-        ) {
-
-            syncSocket.send(
-                JSON.stringify({
-
-                    type:
-                        "identify",
-
-                    role:
-                        currentRole
-
-                })
-            );
-
-            console.log(
-                "👤 Роль отправлена:",
-                currentRole
-            );
-        }
-
-    document
-        .querySelectorAll(".screen")
-        .forEach(
-            x =>
-                x.classList.remove(
-                    "active"
-                )
+    if (typeof syncSocket !== "undefined" && syncSocket.readyState === WebSocket.OPEN) {
+        syncSocket.send(
+            JSON.stringify({
+                type: "identify",
+                role: currentRole
+            })
         );
+        console.log("👤 Роль отправлена:", currentRole);
+    }
 
+    document.querySelectorAll(".screen").forEach(x => x.classList.remove("active"));
 
     if (role === "player") {
-
-        document
-            .getElementById(
-                "playerScreen"
-            )
-            .classList.add("active");
-
+        document.getElementById("playerScreen").classList.add("active");
         renderPlayer();
     }
 
-
     if (role === "operator") {
-
-        document
-            .getElementById(
-                "operatorScreen"
-            )
-            .classList.add("active");
-
+        document.getElementById("operatorScreen").classList.add("active");
         renderOperator();
     }
 }
@@ -6357,42 +6265,31 @@ function sendManualPenalty() {
    CONFIRM MANUAL PENALTY
 ===================================================== */
 
+/* =====================================================
+   CONFIRM MANUAL PENALTY
+===================================================== */
+
 function confirmManualPenalty() {
-
-    const input =
-        document.getElementById(
-            "manualPenaltyInput"
-        );
-
-    const message =
-        document.getElementById(
-            "manualPenaltyMessage"
-        );
-
+    const input = document.getElementById("manualPenaltyInput");
+    const message = document.getElementById("manualPenaltyMessage");
     if (!input) return;
 
-    const penalty =
-        input.value.trim();
+    const penalty = input.value.trim();
+    if (!penalty) return;
 
-    if (!penalty) {
-
-        if (message) {
-            message.innerText =
-                "Введите наказание.";
-        }
-
-        input.focus();
-        return;
+    if (operatorPlayerState) {
+        operatorPlayerState = {
+            ...operatorPlayerState,
+            penalty: penalty,
+            penaltyCompleted: true,
+            pendingOperator: {
+                stage: operatorPlayerState.currentStage,
+                type: "penaltyCompleted"
+            }
+        };
+        sendOperatorState(operatorPlayerState);
+        renderOperator();
     }
-
-    state.penalty = penalty;
-
-    saveState();
-
-    closeManualPenaltyModal();
-
-    // СРАЗУ отправляем игроку
-    sendPenalty();
 }
 
 
@@ -6790,54 +6687,6 @@ function selectTimerTask(index) {
     // после выбора задания.
 }
 
-
-// =====================================================
-// ОПЕРАТОР ЗАПУСКАЕТ ТАЙМЕР
-// =====================================================
-function operatorStartTimer() {
-
-    console.log("🔥 КНОПКА ЗАПУСКА НАЖАТА");
-
-    if (!operatorPlayerState) {
-        console.error("❌ operatorPlayerState отсутствует");
-        return;
-    }
-
-    if (!operatorPlayerState.timerSelected) {
-        console.error("❌ timerSelected = false");
-        return;
-    }
-
-    if (!operatorPlayerState.timerReady) {
-        console.error("❌ timerReady = false");
-        return;
-    }
-
-    // ==========================================
-    // ЗАПУСК ТАЙМЕРА
-    // ==========================================
-
-    operatorPlayerState.timerReady = false;
-    operatorPlayerState.timerRunning = true;
-    operatorPlayerState.timerFinished = false;
-    operatorPlayerState.timerReport = null;
-    operatorPlayerState.timerStartedAt = Date.now();
-    operatorPlayerState.pendingOperator = null;
-
-    console.log(
-        "🚀 ТАЙМЕР ЗАПУЩЕН:",
-        operatorPlayerState.timerStartedAt
-    );
-
-    // ==========================================
-    // ОТПРАВЛЯЕМ ИГРОКУ
-    // ==========================================
-
-    sendOperatorState(operatorPlayerState);
-
-    // Обновляем экран оператора
-    renderOperator();
-}
 
 
 // =====================================================
@@ -7475,12 +7324,10 @@ function executeManualPenalty() {
 }
 
 function escapeAttribute(value) {
-
     return String(value)
         .replace(/\\/g, "\\\\")
         .replace(/'/g, "\\'");
 }
-
 
 
 
@@ -8196,7 +8043,9 @@ function renderRPSPlayer() {
 
 async function operatorNext() {
 
-    if (currentRole !== "operator") return;
+    if (currentRole !== "operator") {
+        return;
+    }
 
     if (!operatorPlayerState) {
         console.warn("⚠️ Состояние игрока ещё не получено");
@@ -8226,6 +8075,7 @@ async function operatorNext() {
 
     renderOperator();
 }
+
 
 /* =====================================================
    PREVIOUS
@@ -8272,7 +8122,6 @@ function operatorPrevious() {
         JSON.stringify(operatorPlayerState)
     );
 
-    // ОБЯЗАТЕЛЬНО отправляем игроку
     sendOperatorState(
         operatorPlayerState
     );
@@ -8285,8 +8134,12 @@ function operatorPrevious() {
 }
 
 
+/* =====================================================
+   RESET STAGES AFTER
+===================================================== */
 
 function resetStagesAfter(stageId) {
+
     if (stageId <= 7) {
         state.adultIndex = 0;
         state.adultScore = 0;
@@ -8324,39 +8177,25 @@ function resetStagesAfter(stageId) {
     }
 }
 
+
 /* =====================================================
    TIMER RESET
 ===================================================== */
 
 function resetTimerStateOnly() {
 
-    clearInterval(
-        timerInterval
-    );
+    if (typeof timerInterval !== "undefined") {
+        clearInterval(timerInterval);
+    }
 
-    state.timerTask =
-        null;
-
-    state.timerSelected =
-        false;
-
-    state.timerReady =
-        false;
-
-    state.timerRunning =
-        false;
-
-    state.timerFinished =
-        false;
-
-    state.timerStartedAt =
-        null;
-
-    state.timerOperatorResult =
-        null;
-
-    state.timerReport =
-        null;
+    state.timerTask = null;
+    state.timerSelected = false;
+    state.timerReady = false;
+    state.timerRunning = false;
+    state.timerFinished = false;
+    state.timerStartedAt = null;
+    state.timerOperatorResult = null;
+    state.timerReport = null;
 }
 
 
@@ -8366,23 +8205,16 @@ function resetTimerStateOnly() {
 
 function rejectPending() {
 
-    const stageId = state.currentStage;
+    const stageId =
+        state.currentStage;
 
-    // Убираем ожидание оператора
     state.pendingOperator = null;
 
-    // Сбрасываем штраф
     state.penalty = null;
     state.penaltyCompleted = false;
 
-    // =========================================
-    // ПОЛНЫЙ СБРОС ИГР
-    // =========================================
-
     state.guessNumber = null;
-
     state.sequenceGame = null;
-
     state.reactionGame = null;
 
     state.rpsPlayer = null;
@@ -8391,9 +8223,9 @@ function rejectPending() {
     state.cardsGameFinished = false;
     state.finalCardGame = null;
 
-    // Сброс общих игровых состояний
     state.gameStarted = false;
     state.gameFinished = false;
+
     state.timerStarted = false;
     state.timerFinished = false;
 
@@ -8401,15 +8233,16 @@ function rejectPending() {
         `Этап ${stageId}: оператор отказал — этап перезапущен`
     );
 
-    // ВАЖНО:
-    // currentStage НЕ меняем
-
     saveState();
 
     renderPlayer();
     renderOperator();
 }
 
+
+/* =====================================================
+   FINAL CARD GAME
+===================================================== */
 
 function initFinalCardGame() {
 
@@ -8423,12 +8256,12 @@ function initFinalCardGame() {
             attempts: 0,
 
             finished: false
-
         };
 
         saveState();
     }
 }
+
 
 /* =====================================================
    STAGE LIST
@@ -8437,27 +8270,23 @@ function initFinalCardGame() {
 function renderStageList() {
 
     const box =
-        document.getElementById(
-            "stageList"
-        );
+        document.getElementById("stageList");
 
-    if (!box) return;
+    if (!box) {
+        return;
+    }
 
     box.innerHTML =
-        stages.map(
-            stage => {
+        stages
+            .map(stage => {
 
                 const active =
-                    stage.id ===
-                    state.currentStage;
+                    stage.id === state.currentStage;
 
                 const done =
-                    state.completed.includes(
-                        stage.id
-                    );
+                    state.completed.includes(stage.id);
 
                 return `
-
                     <div class="
                         stage-list-item
                         ${active ? "active" : ""}
@@ -8465,22 +8294,12 @@ function renderStageList() {
                     ">
 
                         <span>
-
-                            ${String(
-                                stage.id
-                            ).padStart(
-                                2,
-                                "0"
-                            )}
-
+                            ${String(stage.id).padStart(2, "0")}
                             —
-
                             ${stage.title}
-
                         </span>
 
                         <span>
-
                             ${
                                 done
                                     ? "✓"
@@ -8488,18 +8307,17 @@ function renderStageList() {
                                         ? "●"
                                         : ""
                             }
-
                         </span>
 
                     </div>
                 `;
-            }
-        ).join("");
+            })
+            .join("");
 }
 
 
 /* =====================================================
-   OPERATOR LOG
+   OPERATOR RESET
 ===================================================== */
 
 function operatorReset() {
@@ -8518,16 +8336,9 @@ function operatorReset() {
         return;
     }
 
-
-    // Удаляем локальное состояние
     localStorage.removeItem(STORAGE_KEY);
-
-    // Удаляем ID игрока, если используется
     localStorage.removeItem("player_id");
 
-
-    // Если WebSocket подключён —
-    // просим сервер удалить игру
     if (
         typeof socket !== "undefined" &&
         socket &&
@@ -8543,13 +8354,8 @@ function operatorReset() {
         return;
     }
 
-
-    // Если WebSocket ещё не подключён,
-    // просто перезагружаем страницу.
     location.reload();
 }
-
-
 
 
 /* =====================================================
@@ -8558,29 +8364,21 @@ function operatorReset() {
 
 function showFinal() {
 
-    clearInterval(
-        timerInterval
-    );
+    if (typeof timerInterval !== "undefined") {
+        clearInterval(timerInterval);
+    }
 
     document
         .querySelectorAll(".screen")
-        .forEach(
-            x =>
-                x.classList.remove(
-                    "active"
-                )
-        );
+        .forEach(screen => {
+            screen.classList.remove("active");
+        });
 
     const final =
-        document.getElementById(
-            "finalScreen"
-        );
+        document.getElementById("finalScreen");
 
     if (final) {
-
-        final.classList.add(
-            "active"
-        );
+        final.classList.add("active");
     }
 
     launchConfetti();
@@ -8594,16 +8392,18 @@ function showFinal() {
 function launchConfetti() {
 
     const canvas =
-        document.getElementById(
-            "confetti"
-        );
+        document.getElementById("confetti");
 
-    if (!canvas) return;
+    if (!canvas) {
+        return;
+    }
 
     const ctx =
-        canvas.getContext(
-            "2d"
-        );
+        canvas.getContext("2d");
+
+    if (!ctx) {
+        return;
+    }
 
     canvas.width =
         window.innerWidth;
@@ -8612,25 +8412,17 @@ function launchConfetti() {
         window.innerHeight;
 
     const colors = [
-
         "#c51cff",
-
         "#ff4fd8",
-
         "#55ffb0",
-
         "#ffd43b",
-
         "#ffffff"
     ];
 
     const pieces =
         Array.from(
-            {
-                length: 150
-            },
+            { length: 150 },
             () => ({
-
                 x:
                     Math.random() *
                     canvas.width,
@@ -8673,45 +8465,38 @@ function launchConfetti() {
             canvas.height
         );
 
-        pieces.forEach(
-            p => {
+        pieces.forEach(piece => {
 
-                p.y +=
-                    p.speed;
+            piece.y += piece.speed;
+            piece.rotation += piece.rotationSpeed;
 
-                p.rotation +=
-                    p.rotationSpeed;
+            ctx.save();
 
-                ctx.save();
+            ctx.translate(
+                piece.x,
+                piece.y
+            );
 
-                ctx.translate(
-                    p.x,
-                    p.y
-                );
+            ctx.rotate(
+                piece.rotation *
+                Math.PI /
+                180
+            );
 
-                ctx.rotate(
-                    p.rotation *
-                    Math.PI /
-                    180
-                );
+            ctx.fillStyle =
+                piece.color;
 
-                ctx.fillStyle =
-                    p.color;
+            ctx.fillRect(
+                -piece.size / 2,
+                -piece.size / 2,
+                piece.size,
+                piece.size * 1.7
+            );
 
-                ctx.fillRect(
-                    -p.size / 2,
-                    -p.size / 2,
-                    p.size,
-                    p.size * 1.7
-                );
+            ctx.restore();
+        });
 
-                ctx.restore();
-            }
-        );
-
-        requestAnimationFrame(
-            frame
-        );
+        requestAnimationFrame(frame);
     }
 
     frame();
@@ -8725,11 +8510,11 @@ function launchConfetti() {
 function createParticles() {
 
     const container =
-        document.getElementById(
-            "particles"
-        );
+        document.getElementById("particles");
 
-    if (!container) return;
+    if (!container) {
+        return;
+    }
 
     for (
         let i = 0;
@@ -8738,37 +8523,28 @@ function createParticles() {
     ) {
 
         const particle =
-            document.createElement(
-                "div"
-            );
+            document.createElement("div");
 
         particle.className =
             "particle";
 
         particle.style.left =
-            Math.random() *
-            100 +
-            "%";
+            Math.random() * 100 + "%";
 
         particle.style.animationDuration =
             8 +
-            Math.random() *
-            14 +
+            Math.random() * 14 +
             "s";
 
         particle.style.animationDelay =
-            -Math.random() *
-            15 +
+            -Math.random() * 15 +
             "s";
 
         particle.style.opacity =
-            .15 +
-            Math.random() *
-            .45;
+            0.15 +
+            Math.random() * 0.45;
 
-        container.appendChild(
-            particle
-        );
+        container.appendChild(particle);
     }
 }
 
@@ -8781,104 +8557,135 @@ window.addEventListener(
     "storage",
     event => {
 
-        if (
-            event.key !==
-            STORAGE_KEY
-        ) {
+        if (event.key !== STORAGE_KEY) {
             return;
         }
 
         loadState();
 
         const player =
-            document.getElementById(
-                "playerScreen"
-            );
+            document.getElementById("playerScreen");
 
         const operator =
-            document.getElementById(
-                "operatorScreen"
-            );
+            document.getElementById("operatorScreen");
 
         const playerVisible =
             player &&
-            player.classList.contains(
-                "active"
-            );
+            player.classList.contains("active");
 
         const operatorVisible =
             operator &&
-            operator.classList.contains(
-                "active"
-            );
+            operator.classList.contains("active");
 
         if (playerVisible) {
-
             renderPlayer();
         }
 
         if (operatorVisible) {
-
             renderOperator();
         }
     }
 );
 
 
+/* =====================================================
+   GUESS NUMBER
+===================================================== */
+
 function setGuessNumber() {
 
     const input =
-        document.getElementById("operatorGuessNumber");
+        document.getElementById(
+            "operatorGuessNumber"
+        );
 
-    if (!input) return;
+    if (!input) {
+        return;
+    }
 
-    const value = Number(input.value);
+    const value =
+        Number(input.value);
 
     if (
         !Number.isInteger(value) ||
         value < 1 ||
         value > 18
     ) {
-        alert("Введите число от 1 до 18");
+
+        alert(
+            "Введите число от 1 до 18"
+        );
+
         return;
     }
 
     state.guessNumber = {
+
         secret: value,
+
         attempts: 0,
+
         finished: false,
+
         won: false,
+
         lastGuess: null,
+
         message: ""
     };
 
-    addLog(`Оператор загадал число: ${value}`);
+    addLog(
+        `Оператор загадал число: ${value}`
+    );
 
     saveState();
 
-    // ВОТ ЭТО ОБЯЗАТЕЛЬНО
     renderPlayer();
     renderOperator();
 }
 
 
+/* =====================================================
+   MEMORY TEST
+===================================================== */
 
 let memoryTimerInterval = null;
 let memoryTimeLeft = 10;
 
 function startMemoryTest() {
 
-    const intro = document.getElementById("memoryIntro");
-    const test = document.getElementById("memoryTest");
-    const timer = document.getElementById("memoryTimer");
-    const status = document.getElementById("memoryStatus");
-    const card = document.querySelector(".memory-card");
+    const intro =
+        document.getElementById(
+            "memoryIntro"
+        );
+
+    const test =
+        document.getElementById(
+            "memoryTest"
+        );
+
+    const timer =
+        document.getElementById(
+            "memoryTimer"
+        );
+
+    const status =
+        document.getElementById(
+            "memoryStatus"
+        );
+
+    const card =
+        document.querySelector(
+            ".memory-card"
+        );
 
     if (!intro || !test || !timer) {
         return;
     }
 
-    clearInterval(memoryTimerInterval);
+    clearInterval(
+        memoryTimerInterval
+    );
 
     let time = 10;
 
@@ -8886,65 +8693,89 @@ function startMemoryTest() {
     test.style.display = "block";
 
     if (status) {
-        status.textContent = "ТЕСТ ИДЁТ";
+        status.textContent =
+            "ТЕСТ ИДЁТ";
     }
 
-    timer.textContent = time;
+    timer.textContent =
+        time;
 
-    memoryTimerInterval = setInterval(() => {
+    memoryTimerInterval =
+        setInterval(() => {
 
-        time--;
+            time--;
 
-        timer.textContent = time;
+            timer.textContent =
+                time;
 
-        if (time <= 3 && card) {
-            card.classList.add("memory-danger");
-        }
-
-        if (time <= 0) {
-
-            clearInterval(memoryTimerInterval);
-            memoryTimerInterval = null;
-
-            if (status) {
-                status.textContent = "ВРЕМЯ ВЫШЛО";
+            if (time <= 3 && card) {
+                card.classList.add(
+                    "memory-danger"
+                );
             }
 
-            timer.textContent = "0";
+            if (time <= 0) {
 
-            const finished =
-                document.getElementById("memoryFinished");
+                clearInterval(
+                    memoryTimerInterval
+                );
 
-            if (finished) {
-                finished.style.display = "block";
+                memoryTimerInterval =
+                    null;
+
+                if (status) {
+                    status.textContent =
+                        "ВРЕМЯ ВЫШЛО";
+                }
+
+                timer.textContent =
+                    "0";
+
+                const finished =
+                    document.getElementById(
+                        "memoryFinished"
+                    );
+
+                if (finished) {
+                    finished.style.display =
+                        "block";
+                }
             }
-        }
 
-    }, 1000);
+        }, 1000);
 }
+
+
+/* =====================================================
+   REACTION STAGE
+===================================================== */
 
 function renderReactionStage() {
 
     const box =
-        document.getElementById("stageContent");
+        document.getElementById(
+            "stageContent"
+        );
 
-    if (!box) return;
+    if (!box) {
+        return;
+    }
 
     box.innerHTML = `
         <div class="reaction-card">
 
-            <!-- сюда HTML реакции,
-                 который я дал выше -->
+            <!-- HTML реакции можно вставить сюда -->
 
         </div>
     `;
 }
-
-
+}
 
 /* =====================================================
    INIT
 ===================================================== */
+
+console.log("SCRIPT LOADED");
 
 loadState();
 

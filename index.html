@@ -3,16 +3,9 @@
 
 <head>
     <meta charset="UTF-8">
-
-    <meta
-        name="viewport"
-        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
-    >
-
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#08050f">
-
     <title>ДЕЛО №18</title>
-
     <link rel="stylesheet" href="style.css">
 </head>
 
@@ -21,7 +14,6 @@
 <!-- =====================================================
      BACKGROUND
 ===================================================== -->
-
 <div class="bg" aria-hidden="true">
     <div class="orb orb1"></div>
     <div class="orb orb2"></div>
@@ -35,9 +27,7 @@
 <!-- =====================================================
      ROLE SELECT
 ===================================================== -->
-
 <section id="roleScreen" class="screen active">
-
     <div class="role-page">
 
         <div class="logo">
@@ -46,21 +36,6 @@
         </div>
 
         <div class="role-card">
-<div id="playerGuessControls" style="display: none;">
-    <label for="playerGuess">Введите ваше число:</label>
-    <input
-        type="number"
-        id="playerGuess"
-        placeholder="Ваш вариант"
-        min="1"
-        max="100"
-    >
-    <button type="button" onclick="submitPlayerGuess()">
-        Угадать
-    </button>
-
-    <div id="guessResult"></div>
-</div>
             <div class="mini-label">
                 СИСТЕМА АКТИВИРОВАНА
             </div>
@@ -72,19 +47,16 @@
             </p>
 
             <div class="role-buttons">
-
                 <button
                     class="role-btn player"
                     type="button"
                     onclick="selectRole('player')"
                 >
                     <span class="role-icon">👤</span>
-
                     <span class="role-text">
                         <b>ИГРОК</b>
                         <small>Пройти испытания</small>
                     </span>
-
                     <i>→</i>
                 </button>
 
@@ -94,33 +66,29 @@
                     onclick="selectRole('operator')"
                 >
                     <span class="role-icon">🖥️</span>
-
                     <span class="role-text">
                         <b>ОПЕРАТОР</b>
                         <small>Управлять квестом</small>
                     </span>
-
                     <i>→</i>
                 </button>
 
-                            <button
-                type="button"
-                onclick="resetLocalGame()"
-                style="
-                    margin-top: 20px;
-                    padding: 10px 18px;
-                    background: #8b0000;
-                    color: white;
-                    border: none;
-                    border-radius: 8px;
-                    cursor: pointer;
-                "
-            >
-                🗑️ Сбросить игру
-            </button>
-
+                <button
+                    type="button"
+                    onclick="resetLocalGame()"
+                    style="
+                        margin-top: 20px;
+                        padding: 10px 18px;
+                        background: #8b0000;
+                        color: white;
+                        border: none;
+                        border-radius: 8px;
+                        cursor: pointer;
+                    "
+                >
+                    🗑️ Сбросить игру
+                </button>
             </div>
-
         </div>
 
         <div class="system-footer">
@@ -128,397 +96,180 @@
         </div>
 
     </div>
-
 </section>
 
 
 <!-- =====================================================
      PLAYER
 ===================================================== -->
-
 <section id="playerScreen" class="screen">
-
     <header class="topbar">
-
         <div class="brand">
             <span>CASE</span>
             <b>18</b>
         </div>
-
         <div class="top-status">
             <span class="status-dot"></span>
             ONLINE
         </div>
-
     </header>
 
     <main class="container">
-
         <div class="progress-wrap">
-
             <div class="progress-info">
-
-                <span id="playerProgress">
-                    ЭТАП 1 / 11
-                </span>
-
-                <span id="playerPercent">
-                    0%
-                </span>
-
+                <span id="playerProgress">ЭТАП 1 / 11</span>
+                <span id="playerPercent">0%</span>
             </div>
-
             <div class="progress">
-                <div
-                    id="playerProgressBar"
-                    class="progress-bar"
-                ></div>
+                <div id="playerProgressBar" class="progress-bar"></div>
             </div>
-
         </div>
 
         <div id="playerStage"></div>
 
-        <div id="playerAction"></div>
-
+        <!-- Блок ввода игрока теперь здесь -->
+        <div id="playerAction">
+            <div id="playerGuessControls" style="display: none; margin-top: 20px;">
+                <label for="playerGuess">Введите ваше число:</label>
+                <input type="number" id="playerGuess" placeholder="Ваш вариант" min="1" max="100">
+                <button type="button" onclick="submitPlayerGuess()">Угадать</button>
+                <div id="guessResult"></div>
+            </div>
+        </div>
     </main>
-
 </section>
 
 
 <!-- =====================================================
      OPERATOR
 ===================================================== -->
-
 <section id="operatorScreen" class="screen">
-
     <header class="topbar">
-
         <div class="brand">
             <span>OPERATOR</span>
             <b>18</b>
         </div>
-
-        <button
-            class="small-button"
-            type="button"
-            onclick="backToRoles()"
-        >
+        <button class="small-button" type="button" onclick="backToRoles()">
             ← ВЫХОД
         </button>
-
     </header>
 
     <main class="operator-container">
-
         <div class="operator-header">
-
             <div>
-
-                <div class="mini-label">
-                    CONTROL CENTER
-                </div>
-
-                <h1>
-                    ПАНЕЛЬ ОПЕРАТОРА
-                </h1>
-
-                <p class="muted">
-                    Управляйте прохождением дела №18
-                </p>
-
+                <div class="mini-label">CONTROL CENTER</div>
+                <h1>ПАНЕЛЬ ОПЕРАТОРА</h1>
+                <p class="muted">Управляйте прохождением дела №18</p>
             </div>
-
-            <div id="operatorStatus" class="live-badge">
-                ● LIVE
-            </div>
-
+            <div id="operatorStatus" class="live-badge">● LIVE</div>
         </div>
-
 
         <div class="operator-grid">
-
             <div class="operator-main">
-
                 <!-- STATUS -->
-
                 <div class="panel-card">
-
                     <div class="panel-title">
-
                         <span>СТАТУС ИГРОКА</span>
-
-                        <span id="operatorStage">
-                            ЭТАП 1
-                        </span>
-
+                        <span id="operatorStage">ЭТАП 1</span>
                     </div>
-
                     <div class="big-stage">
-
-                        <span id="operatorStageNumber">
-                            01
-                        </span>
-
+                        <span id="operatorStageNumber">01</span>
                         <div>
-
-                            <small>
-                                ТЕКУЩИЙ ЭТАП
-                            </small>
-
-                            <strong id="operatorStageName">
-                                —
-                            </strong>
-
+                            <small>ТЕКУЩИЙ ЭТАП</small>
+                            <strong id="operatorStageName">—</strong>
                         </div>
-
                     </div>
-
                     <div class="operator-progress">
-
-                        <div
-                            id="operatorProgressBar"
-                        ></div>
-
+                        <div id="operatorProgressBar"></div>
                     </div>
-
                 </div>
-
 
                 <!-- CONTROLS -->
-
-                <div
-                    id="operatorControls"
-                    class="panel-card"
-                ></div>
-
+                <div id="operatorControls" class="panel-card"></div>
 
                 <!-- LOG -->
-
                 <div class="panel-card">
-
-                    <div class="panel-title">
-                        ЖУРНАЛ
-                    </div>
-
+                    <div class="panel-title">ЖУРНАЛ</div>
                     <div id="operatorLog"></div>
-
                 </div>
-
             </div>
 
-
             <!-- SIDE -->
-
             <aside class="operator-side">
-
                 <div class="panel-card">
-
-                    <div class="panel-title">
-                        БЫСТРЫЕ ДЕЙСТВИЯ
-                    </div>
-
-                    <button
-                        class="admin-btn"
-                        type="button"
-                        onclick="operatorNext()"
-                    >
+                    <div class="panel-title">БЫСТРЫЕ ДЕЙСТВИЯ</div>
+                    <button class="admin-btn" type="button" onclick="operatorNext()">
                         ✓ ПОДТВЕРДИТЬ ЭТАП
                     </button>
-
-
-
-                    <button
-                        class="admin-btn secondary"
-                        type="button"
-                        onclick="operatorReset()"
-                    >
+                    <button class="admin-btn secondary" type="button" onclick="operatorReset()">
                         ↻ СБРОСИТЬ КВЕСТ
                     </button>
-
                 </div>
-
 
                 <div class="panel-card">
-
-                    <div class="panel-title">
-                        ЭТАПЫ
-                    </div>
-
+                    <div class="panel-title">ЭТАПЫ</div>
                     <div id="stageList"></div>
-
                 </div>
-                <div class="operator-panel">
-
-
-</div>
-
             </aside>
-
         </div>
-
     </main>
-
 </section>
 
 
 <!-- =====================================================
      FINAL
 ===================================================== -->
-
 <section id="finalScreen" class="screen">
-
     <div class="final-content">
-
-        <div class="final-case">
-            CASE CLOSED
-        </div>
-
-        <div class="final-number">
-            18
-        </div>
-
-        <h1>
-            ДЕЛО ЗАКРЫТО
-        </h1>
-
+        <div class="final-case">CASE CLOSED</div>
+        <div class="final-number">18</div>
+        <h1>ДЕЛО ЗАКРЫТО</h1>
         <div class="final-reward">
-
-            <small>
-                НАГРАДА
-            </small>
-
-            <strong>
-                18 000 ₸
-            </strong>
-
+            <small>НАГРАДА</small>
+            <strong>18 000 ₸</strong>
         </div>
-
-        <p>
-            С 18-летием, сестрёнка ❤️
-        </p>
-
+        <p>С 18-летием, сестрёнка ❤️</p>
     </div>
-
     <canvas id="confetti"></canvas>
-
 </section>
 
 
 <!-- =====================================================
      PENALTY MODAL
 ===================================================== -->
-
-<div
-    id="penaltyModal"
-    class="modal"
-    onclick="closePenaltyOutside(event)"
->
-
+<div id="penaltyModal" class="modal" onclick="closePenaltyOutside(event)">
     <div class="modal-card">
-
         <div class="modal-head">
-
             <div>
-                <div class="mini-label">
-                    OPERATOR ACTION
-                </div>
-
-                <h2>
-                    Выдать наказание
-                </h2>
-
-                <p class="muted">
-                    Можно использовать в любой момент игры
-                </p>
+                <div class="mini-label">OPERATOR ACTION</div>
+                <h2>Выдать наказание</h2>
+                <p class="muted">Можно использовать в любой момент игры</p>
             </div>
-
-            <button
-                class="modal-close"
-                type="button"
-                onclick="closePenaltyModal()"
-            >
-                ×
-            </button>
-
+            <button class="modal-close" type="button" onclick="closePenaltyModal()">×</button>
         </div>
-
 
         <div class="penalty-grid">
-
-            <button
-                class="penalty-option"
-                type="button"
-                onclick="selectPenalty('Штраф 500 ₸')"
-            >
-                💸 Штраф 500 ₸
-            </button>
-
-            <button
-                class="penalty-option"
-                type="button"
-                onclick="selectPenalty('Штраф 1 000 ₸')"
-            >
-                💸 Штраф 1 000 ₸
-            </button>
-
-            <button
-                class="penalty-option"
-                type="button"
-                onclick="selectPenalty('Штраф 2 000 ₸')"
-            >
-                💸 Штраф 2 000 ₸
-            </button>
-
-            <button
-                class="penalty-option"
-                type="button"
-                onclick="selectPenalty('Дополнительное задание')"
-            >
-                ⚡ Дополнительное задание
-            </button>
-
-            <button
-                class="penalty-option"
-                type="button"
-                onclick="selectPenalty('Пропуск хода')"
-            >
-                ⏭ Пропуск хода
-            </button>
-
+            <button class="penalty-option" type="button" onclick="selectPenalty('Штраф 500 ₸')">💸 Штраф 500 ₸</button>
+            <button class="penalty-option" type="button" onclick="selectPenalty('Штраф 1 000 ₸')">💸 Штраф 1 000 ₸</button>
+            <button class="penalty-option" type="button" onclick="selectPenalty('Штраф 2 000 ₸')">💸 Штраф 2 000 ₸</button>
+            <button class="penalty-option" type="button" onclick="selectPenalty('Дополнительное задание')">⚡ Дополнительное задание</button>
+            <button class="penalty-option" type="button" onclick="selectPenalty('Пропуск хода')">⏭ Пропуск хода</button>
         </div>
 
+        <div class="penalty-custom">
+            <label for="customPenalty">ИЛИ СВОЁ НАКАЗАНИЕ</label>
+            <textarea id="customPenalty" placeholder="Например: отдать оператору 1000 ₸..."></textarea>
+        </div>
 
-      <div class="penalty-custom">
-
-    <label for="customPenalty">
-        ИЛИ СВОЁ НАКАЗАНИЕ
-    </label>
-
-    <textarea
-        id="customPenalty"
-        placeholder="Например: отдать оператору 1000 ₸..."
-    ></textarea>
-
-</div>
-
-
-        <button
-            class="admin-btn"
-            type="button"
-            onclick="sendPenalty()"
-        >
+        <button class="admin-btn" type="button" onclick="sendPenalty()">
             ✓ ОТПРАВИТЬ ИГРОКУ
         </button>
-
     </div>
-
 </div>
 
-
 <!-- TOAST -->
-
 <div id="toast" class="toast"></div>
+
 <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
