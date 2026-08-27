@@ -1415,6 +1415,330 @@ function addLog(text) {
     saveState();
 }
 
+/* =====================================================
+   OPERATOR PENDING
+===================================================== */
+
+function renderOperatorPending(stage) {
+
+    const pending =
+        operatorPlayerState?.pendingOperator;
+
+    if (!pending) {
+        return "";
+    }
+
+    const playerState =
+        operatorPlayerState;
+
+
+    if (pending.type === "penaltyAssigned") {
+
+        return `
+            <div class="operator-action">
+
+                <h3>⚠ ШТРАФ НАЗНАЧЕН</h3>
+
+                <div class="success-box">
+                    ${playerState.penalty || "Штраф не указан"}
+                </div>
+
+                <p>
+                    Игрок должна выполнить штраф.
+                </p>
+
+            </div>
+        `;
+    }
+
+
+    if (pending.type === "penaltyCompleted") {
+
+        return `
+            <div class="operator-action">
+
+                <h3>✓ ШТРАФ ВЫПОЛНЕН</h3>
+
+                <div class="success-box">
+                    ${playerState.penalty || "Штраф"}
+                </div>
+
+            </div>
+
+            <button
+                class="admin-btn"
+                type="button"
+                onclick="confirmPenalty()"
+            >
+                ✓ ПОДТВЕРДИТЬ ШТРАФ
+            </button>
+        `;
+    }
+
+
+    if (pending.type === "adult") {
+
+        return `
+            <div class="operator-action">
+
+                <h3>Тест на взрослость завершён</h3>
+
+                <p>
+                    Результат:
+                    <b>${playerState.adultScore}/3</b>
+                </p>
+
+                <div class="success-box">
+                    ${Math.round(
+                        playerState.adultScore / 3 * 100
+                    )}%
+                </div>
+
+            </div>
+
+            ${renderPenaltySelector()}
+
+            ${
+                playerState.penalty
+                    ? `
+                        <button
+                            class="admin-btn"
+                            type="button"
+                            onclick="sendPenalty()"
+                        >
+                            НАЗНАЧИТЬ ШТРАФ
+                        </button>
+
+                        <button
+                            class="admin-btn secondary"
+                            type="button"
+                            onclick="skipPenaltyAndContinue()"
+                        >
+                            ПРОПУСТИТЬ ШТРАФ
+                        </button>
+                    `
+                    : ""
+            }
+        `;
+    }
+
+
+    if (pending.type === "route") {
+
+        return `
+            <div class="operator-action">
+
+                <h3>
+                    Точка ${pending.step + 1}
+                </h3>
+
+                <p>
+                    Игрок утверждает,
+                    что выполнила эту точку.
+                </p>
+
+            </div>
+
+            <button
+                class="admin-btn"
+                type="button"
+                onclick="confirmRoute()"
+            >
+                ✓ ПОДТВЕРДИТЬ ТОЧКУ
+            </button>
+
+            <button
+                class="admin-btn secondary"
+                type="button"
+                onclick="rejectPending()"
+            >
+                ✕ НЕ ПОДТВЕРЖДАТЬ
+            </button>
+        `;
+    }
+
+
+    if (pending.type === "memory") {
+
+        return `
+            <div class="operator-action">
+
+                <h3>Башня памяти</h3>
+
+                <p>
+                    Игрок утверждает,
+                    что справилась.
+                </p>
+
+            </div>
+
+            <button
+                class="admin-btn"
+                type="button"
+                onclick="confirmMemory()"
+            >
+                ✓ ПОДТВЕРДИТЬ
+            </button>
+
+            <button
+                class="admin-btn secondary"
+                type="button"
+                onclick="rejectPending()"
+            >
+                ✕ НЕ ПОДТВЕРЖДАТЬ
+            </button>
+        `;
+    }
+
+    if (
+    playerState.timerSelected &&
+    playerState.timerReady &&
+    !playerState.timerRunning &&
+    !playerState.timerFinished
+) {
+
+    return `
+        <div class="operator-action">
+
+            <h3>
+                ⏱ ИГРОК ГОТОВА
+            </h3>
+
+            <p>
+                Задание выбрано:
+                <b>
+                    ${
+                        stages[8]?.tasks?.[playerState.timerTask]?.title
+                        || "Задание"
+                    }
+                </b>
+            </p>
+
+            <div class="success-box">
+                ✓ Игрок нажала «ГОТОВА»
+                <br><br>
+                Можно запускать 18 секунд.
+            </div>
+
+        </div>
+
+        <button
+            class="admin-btn"
+            type="button"
+            onclick="startPlayerTimer()"
+        >
+            ▶ ЗАПУСТИТЬ 18 СЕКУНД
+        </button>
+
+        <button
+            class="admin-btn secondary"
+            type="button"
+            onclick="rejectPending()"
+        >
+            ✕ ОТКАЗАТЬ
+        </button>
+    `;
+}
+
+if (pending.type === "timerReady") {
+
+    const task =
+        playerState.timerSelected
+            ? stage.tasks[playerState.timerTask]
+            : null;
+
+    return `
+        <div class="operator-action">
+
+            <h3>⚡ ИГРОК ГОТОВ</h3>
+
+            <p>
+                Игрок готова к испытанию.
+            </p>
+
+            ${
+                task
+                    ? `
+                        <div class="success-box">
+                            Задание:
+                            <b>${task.title}</b>
+                        </div>
+                    `
+                    : ""
+            }
+
+        </div>
+
+                <button
+            class="admin-btn"
+            type="button"
+            id="startTimerButton"
+        >
+            ▶ ЗАПУСТИТЬ 18 СЕКУНД
+        </button>
+    `;
+}
+    if (pending.type === "timer") {
+
+        return `
+            <div class="operator-action">
+
+                <h3>Отчёт игрока</h3>
+
+                <p>
+                    Игрок завершила
+                    испытание на скорость.
+                </p>
+
+            </div>
+
+            <button
+                class="admin-btn"
+                type="button"
+                onclick="operatorNext()"
+            >
+                ✓ ПОДТВЕРДИТЬ
+            </button>
+
+            <button
+                class="admin-btn secondary"
+                type="button"
+                onclick="rejectPending()"
+            >
+                ✕ ОТКАЗАТЬ
+            </button>
+        `;
+    }
+
+
+    return `
+        <div class="operator-action">
+
+            <h3>Игрок ждёт подтверждения</h3>
+
+            <p>
+                ${stage.title}
+            </p>
+
+        </div>
+
+        <button
+            class="admin-btn"
+            type="button"
+            onclick="operatorNext()"
+        >
+            ✓ ПОДТВЕРДИТЬ ПЕРЕХОД
+        </button>
+
+        <button
+            class="admin-btn secondary"
+            type="button"
+            onclick="rejectPending()"
+        >
+            ✕ ОТКАЗАТЬ
+        </button>
+    `;
+}
 
 /* =====================================================
    ROLE
@@ -6772,330 +7096,6 @@ function resetTimerTask() {
 }
 
 
-/* =====================================================
-   OPERATOR PENDING
-===================================================== */
-
-function renderOperatorPending(stage) {
-
-    const pending =
-        operatorPlayerState?.pendingOperator;
-
-    if (!pending) {
-        return "";
-    }
-
-    const playerState =
-        operatorPlayerState;
-
-
-    if (pending.type === "penaltyAssigned") {
-
-        return `
-            <div class="operator-action">
-
-                <h3>⚠ ШТРАФ НАЗНАЧЕН</h3>
-
-                <div class="success-box">
-                    ${playerState.penalty || "Штраф не указан"}
-                </div>
-
-                <p>
-                    Игрок должна выполнить штраф.
-                </p>
-
-            </div>
-        `;
-    }
-
-
-    if (pending.type === "penaltyCompleted") {
-
-        return `
-            <div class="operator-action">
-
-                <h3>✓ ШТРАФ ВЫПОЛНЕН</h3>
-
-                <div class="success-box">
-                    ${playerState.penalty || "Штраф"}
-                </div>
-
-            </div>
-
-            <button
-                class="admin-btn"
-                type="button"
-                onclick="confirmPenalty()"
-            >
-                ✓ ПОДТВЕРДИТЬ ШТРАФ
-            </button>
-        `;
-    }
-
-
-    if (pending.type === "adult") {
-
-        return `
-            <div class="operator-action">
-
-                <h3>Тест на взрослость завершён</h3>
-
-                <p>
-                    Результат:
-                    <b>${playerState.adultScore}/3</b>
-                </p>
-
-                <div class="success-box">
-                    ${Math.round(
-                        playerState.adultScore / 3 * 100
-                    )}%
-                </div>
-
-            </div>
-
-            ${renderPenaltySelector()}
-
-            ${
-                playerState.penalty
-                    ? `
-                        <button
-                            class="admin-btn"
-                            type="button"
-                            onclick="sendPenalty()"
-                        >
-                            НАЗНАЧИТЬ ШТРАФ
-                        </button>
-
-                        <button
-                            class="admin-btn secondary"
-                            type="button"
-                            onclick="skipPenaltyAndContinue()"
-                        >
-                            ПРОПУСТИТЬ ШТРАФ
-                        </button>
-                    `
-                    : ""
-            }
-        `;
-    }
-
-
-    if (pending.type === "route") {
-
-        return `
-            <div class="operator-action">
-
-                <h3>
-                    Точка ${pending.step + 1}
-                </h3>
-
-                <p>
-                    Игрок утверждает,
-                    что выполнила эту точку.
-                </p>
-
-            </div>
-
-            <button
-                class="admin-btn"
-                type="button"
-                onclick="confirmRoute()"
-            >
-                ✓ ПОДТВЕРДИТЬ ТОЧКУ
-            </button>
-
-            <button
-                class="admin-btn secondary"
-                type="button"
-                onclick="rejectPending()"
-            >
-                ✕ НЕ ПОДТВЕРЖДАТЬ
-            </button>
-        `;
-    }
-
-
-    if (pending.type === "memory") {
-
-        return `
-            <div class="operator-action">
-
-                <h3>Башня памяти</h3>
-
-                <p>
-                    Игрок утверждает,
-                    что справилась.
-                </p>
-
-            </div>
-
-            <button
-                class="admin-btn"
-                type="button"
-                onclick="confirmMemory()"
-            >
-                ✓ ПОДТВЕРДИТЬ
-            </button>
-
-            <button
-                class="admin-btn secondary"
-                type="button"
-                onclick="rejectPending()"
-            >
-                ✕ НЕ ПОДТВЕРЖДАТЬ
-            </button>
-        `;
-    }
-
-    if (
-    playerState.timerSelected &&
-    playerState.timerReady &&
-    !playerState.timerRunning &&
-    !playerState.timerFinished
-) {
-
-    return `
-        <div class="operator-action">
-
-            <h3>
-                ⏱ ИГРОК ГОТОВА
-            </h3>
-
-            <p>
-                Задание выбрано:
-                <b>
-                    ${
-                        stages[8]?.tasks?.[playerState.timerTask]?.title
-                        || "Задание"
-                    }
-                </b>
-            </p>
-
-            <div class="success-box">
-                ✓ Игрок нажала «ГОТОВА»
-                <br><br>
-                Можно запускать 18 секунд.
-            </div>
-
-        </div>
-
-        <button
-            class="admin-btn"
-            type="button"
-            onclick="startPlayerTimer()"
-        >
-            ▶ ЗАПУСТИТЬ 18 СЕКУНД
-        </button>
-
-        <button
-            class="admin-btn secondary"
-            type="button"
-            onclick="rejectPending()"
-        >
-            ✕ ОТКАЗАТЬ
-        </button>
-    `;
-}
-
-if (pending.type === "timerReady") {
-
-    const task =
-        playerState.timerSelected
-            ? stage.tasks[playerState.timerTask]
-            : null;
-
-    return `
-        <div class="operator-action">
-
-            <h3>⚡ ИГРОК ГОТОВ</h3>
-
-            <p>
-                Игрок готова к испытанию.
-            </p>
-
-            ${
-                task
-                    ? `
-                        <div class="success-box">
-                            Задание:
-                            <b>${task.title}</b>
-                        </div>
-                    `
-                    : ""
-            }
-
-        </div>
-
-                <button
-            class="admin-btn"
-            type="button"
-            id="startTimerButton"
-        >
-            ▶ ЗАПУСТИТЬ 18 СЕКУНД
-        </button>
-    `;
-}
-    if (pending.type === "timer") {
-
-        return `
-            <div class="operator-action">
-
-                <h3>Отчёт игрока</h3>
-
-                <p>
-                    Игрок завершила
-                    испытание на скорость.
-                </p>
-
-            </div>
-
-            <button
-                class="admin-btn"
-                type="button"
-                onclick="operatorNext()"
-            >
-                ✓ ПОДТВЕРДИТЬ
-            </button>
-
-            <button
-                class="admin-btn secondary"
-                type="button"
-                onclick="rejectPending()"
-            >
-                ✕ ОТКАЗАТЬ
-            </button>
-        `;
-    }
-
-
-    return `
-        <div class="operator-action">
-
-            <h3>Игрок ждёт подтверждения</h3>
-
-            <p>
-                ${stage.title}
-            </p>
-
-        </div>
-
-        <button
-            class="admin-btn"
-            type="button"
-            onclick="operatorNext()"
-        >
-            ✓ ПОДТВЕРДИТЬ ПЕРЕХОД
-        </button>
-
-        <button
-            class="admin-btn secondary"
-            type="button"
-            onclick="rejectPending()"
-        >
-            ✕ ОТКАЗАТЬ
-        </button>
-    `;
-}
 
 
 function getOperatorActionContent(pending, stage) {
