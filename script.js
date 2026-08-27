@@ -2,6 +2,52 @@ var currentRole = null;
 
 "use strict";
 
+
+/* =====================================================
+   PARTICLES
+===================================================== */
+
+function createParticles() {
+
+    const container =
+        document.getElementById("particles");
+
+    if (!container) {
+        return;
+    }
+
+    for (
+        let i = 0;
+        i < 35;
+        i++
+    ) {
+
+        const particle =
+            document.createElement("div");
+
+        particle.className =
+            "particle";
+
+        particle.style.left =
+            Math.random() * 100 + "%";
+
+        particle.style.animationDuration =
+            8 +
+            Math.random() * 14 +
+            "s";
+
+        particle.style.animationDelay =
+            -Math.random() * 15 +
+            "s";
+
+        particle.style.opacity =
+            0.15 +
+            Math.random() * 0.45;
+
+        container.appendChild(particle);
+    }
+}
+
 /* =====================================================
    CONFIG
 ===================================================== */
@@ -8503,50 +8549,7 @@ function launchConfetti() {
 }
 
 
-/* =====================================================
-   PARTICLES
-===================================================== */
 
-function createParticles() {
-
-    const container =
-        document.getElementById("particles");
-
-    if (!container) {
-        return;
-    }
-
-    for (
-        let i = 0;
-        i < 35;
-        i++
-    ) {
-
-        const particle =
-            document.createElement("div");
-
-        particle.className =
-            "particle";
-
-        particle.style.left =
-            Math.random() * 100 + "%";
-
-        particle.style.animationDuration =
-            8 +
-            Math.random() * 14 +
-            "s";
-
-        particle.style.animationDelay =
-            -Math.random() * 15 +
-            "s";
-
-        particle.style.opacity =
-            0.15 +
-            Math.random() * 0.45;
-
-        container.appendChild(particle);
-    }
-}
 
 
 /* =====================================================
