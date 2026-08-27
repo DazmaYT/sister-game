@@ -1415,6 +1415,23 @@ function addLog(text) {
     saveState();
 }
 
+
+function renderOperator() {
+    updateOperatorHeader();
+    renderOperatorControls();
+    renderStageList();
+    renderOperatorLog();
+
+    // Автоматически добавляем/обновляем контейнер модального окна
+    let modalContainer = document.getElementById("penaltyModalContainer");
+    if (!modalContainer) {
+        modalContainer = document.createElement("div");
+        modalContainer.id = "penaltyModalContainer";
+        document.body.appendChild(modalContainer);
+    }
+    modalContainer.innerHTML = renderPenaltyModal();
+}
+
 /* =====================================================
    OPERATOR PENDING
 ===================================================== */
@@ -5699,21 +5716,7 @@ function renderOperatorLog() {
             .join("");
 }
 
-function renderOperator() {
-    updateOperatorHeader();
-    renderOperatorControls();
-    renderStageList();
-    renderOperatorLog();
 
-    // Автоматически добавляем/обновляем контейнер модального окна
-    let modalContainer = document.getElementById("penaltyModalContainer");
-    if (!modalContainer) {
-        modalContainer = document.createElement("div");
-        modalContainer.id = "penaltyModalContainer";
-        document.body.appendChild(modalContainer);
-    }
-    modalContainer.innerHTML = renderPenaltyModal();
-}
 
 
 function updateOperatorHeader() {
