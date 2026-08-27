@@ -1415,22 +1415,644 @@ function addLog(text) {
     saveState();
 }
 
+function updateOperatorHeader() {
 
-function renderOperator() {
-    updateOperatorHeader();
-    renderOperatorControls();
-    renderStageList();
-    renderOperatorLog();
+    const stage =
+        stages[
+            state.currentStage - 1
+        ];
 
-    // Автоматически добавляем/обновляем контейнер модального окна
-    let modalContainer = document.getElementById("penaltyModalContainer");
-    if (!modalContainer) {
-        modalContainer = document.createElement("div");
-        modalContainer.id = "penaltyModalContainer";
-        document.body.appendChild(modalContainer);
-    }
-    modalContainer.innerHTML = renderPenaltyModal();
+    const stageElement =
+        document.getElementById(
+            "operatorStage"
+        );
+
+    const numberElement =
+        document.getElementById(
+            "operatorStageNumber"
+        );
+
+    const nameElement =
+        document.getElementById(
+            "operatorStageName"
+        );
+
+    if (stageElement) {
+
+        stageElement.innerText =
+            `ЭТАП ${state.currentStage}`;
+    }
+
+    if (numberElement) {
+
+        numberElement.innerText =
+            String(
+                state.currentStage
+            ).padStart(
+                2,
+                "0"
+            );
+    }
+
+    if (nameElement) {
+
+        nameElement.innerText =
+            stage
+                ? stage.title
+                : "ЗАВЕРШЕНО";
+    }
+
+    const total =
+        state.currentStage >
+        EARLY_STAGES
+            ? TOTAL_STAGES
+            : EARLY_STAGES;
+
+    const bar =
+        document.getElementById(
+            "operatorProgressBar"
+        );
+
+    if (bar) {
+
+        bar.style.width =
+            `${
+                (
+                    (state.currentStage - 1)
+                    /
+                    total
+                ) * 100
+            }%`;
+    }
 }
+
+/* =====================================================
+   OPERATOR CONTROLS
+===================================================== */
+
+function renderOperatorControls() {
+
+    const box =
+        document.getElementById("operatorControls");
+
+    if (!box) return;
+
+    const playerState =
+        operatorPlayerState;
+
+    if (!playerState) {
+        box.innerHTML = `
+            <div class="instruction">
+                ⏳ ОЖИДАНИЕ ПОДКЛЮЧЕНИЯ ИГРОКА
+            </div>
+        `;
+        return;
+    }
+
+    const stage =
+        stages[playerState.currentStage - 1];
+
+    if (!stage) return;
+
+    // =====================================================
+    // ПРЕДЫДУЩИЙ ЭТАП
+    // =====================================================
+
+    const previousButton =
+        playerState.currentStage > 1
+            ? `
+                <button
+                    class="admin-btn secondary"
+                    type="button"
+                    onclick="operatorPrevious()"
+                >
+                    ← ПРЕДЫДУЩИЙ ЭТАП
+                </button>
+            `
+            : "";
+    
+
+    // =====================================================
+    // ЭТАП 14 (GUESS GAME)
+    // =====================================================
+   if (stage.id === 14) {
+
+    box.innerHTML = `
+        <div class="panel-title">
+            GUESS GAME
+        </div>
+
+        <div class="guess-admin-card">
+
+            <div class="guess-admin-title">
+                🔐 ЗАГАДАТЬ ЧИСЛО
+            </div>
+
+            <p>
+                Игрок будет угадывать число от 1 до 18.
+            </p>
+
+            <input
+                id="operatorGuessNumber"
+                class="answer-input"
+                type="number"
+                min="1"
+                max="18"
+                placeholder="1 — 18"
+            >
+
+            <button
+                class="admin-btn"
+                type="button"
+                onclick="setGuessNumber()"
+            >
+                🔒 ЗАПЕЧАТАТЬ ЧИСЛО
+            </button>
+
+        </div>
+    `;
+
+    return;
+}
+
+    // =====================================================
+    // ФИНАЛ
+    // =====================================================
+
+    if (stage.type === "final") {
+        box.innerHTML = `
+            <div class="panel-title">
+                ДЕЛО ЗАКРЫТО
+            </div>
+
+            <div class="success-box">
+                ✓ 17 игровых этапов завершены.
+            </div>
+        `;
+        return;
+    }
+
+
+
+    
+
+    // =====================================================
+    // PENDING OPERATOR
+    // =====================================================
+
+if (
+    playerState.pendingOperator &&
+    playerState.pendingOperator.stage === playerState.currentStage
+) {
+
+    const pendingType =
+        playerState.pendingOperator.type;
+
+    if (pendingType === "penaltyAssigned") {
+
+        box.innerHTML = `
+            <div class="panel-title">
+                НАКАЗАНИЕ
+            </div>
+
+            <div class="operator-action">
+
+                <h3>⚠ НАЗНАЧЕН ШТРАФ</h3>
+
+                <p>
+                    <b>${playerState.penalty || "Штраф не указан"}</b>
+                </p>
+
+                ${
+                    playerState.penaltyCompleted
+                        ? `
+                            <div class="success-box">
+                                ✓ Игрок выполнила штраф.
+                            </div>
+
+                            <button
+                                class="admin-btn"
+                                type="button"
+                                onclick="confirmPenalty()"
+                            >
+                                ✓ ПОДТВЕРДИТЬ ВЫПОЛНЕНИЕ
+                            </button>
+                        `
+                        : `
+                            <div class="instruction">
+                                ⏳ Ожидается выполнение штрафа игроком.
+                            </div>
+                        `
+                }
+
+            </div>
+
+            ${previousButton}
+        `;
+
+        return;
+    }
+
+    if (pendingType === "penaltyCompleted") {
+
+        box.innerHTML = `
+            <div class="panel-title">
+                НАКАЗАНИЕ ВЫПОЛНЕНО
+            </div>
+
+            <div class="success-box">
+                ✓ Наказание подтверждено
+            </div>
+
+            <button
+                class="admin-btn"
+                type="button"
+                onclick="restartStageAfterPenalty()"
+            >
+                ↻ НАЧАТЬ ЭТАП ЗАНОВО
+            </button>
+
+            ${previousButton}
+        `;
+
+        return;
+    }
+
+    box.innerHTML = `
+        <div class="panel-title">
+            ТРЕБУЕТСЯ ВАШЕ ДЕЙСТВИЕ
+        </div>
+
+        ${renderOperatorPending(stage)}
+
+        <br>
+
+        ${previousButton}
+
+        ${globalPenaltyButtonHtml}
+    `;
+
+    return;
+}
+
+    // =====================================================
+    // TIMER — ЭТАП 9
+    // =====================================================
+
+    if (stage.id === 9) {
+
+        box.innerHTML = `
+            <div class="panel-title">
+                ИСПЫТАНИЕ НА 18 СЕКУНД
+            </div>
+
+            ${renderTimerOperatorControls()}
+
+            ${globalPenaltyButtonHtml}
+
+            ${previousButton}
+        `;
+
+        return;
+    }
+
+    // =====================================================
+    // RPS — ЭТАП 12
+    // =====================================================
+
+if (stage.id === 12) {
+
+    const playerChoice = state.rpsPlayer;
+    const operatorChoice = state.rpsOperator;
+
+    box.innerHTML = `
+
+        <div class="panel-title">
+            BATTLE PROTOCOL
+        </div>
+
+        <div class="operator-action rps-operator-card">
+
+            <div class="card-label">
+                ДУЭЛЬ // ОПЕРАТОР
+            </div>
+
+            ${
+                playerChoice
+                ? `
+                    <div class="rps-player-move">
+
+                        <div class="rps-big-icon">
+                            ${rpsIcon(playerChoice)}
+                        </div>
+
+                        <div>
+                            <span>
+                                ХОД ИГРОКА
+                            </span>
+
+                            <strong>
+                                ${rpsName(playerChoice)}
+                            </strong>
+                        </div>
+
+                    </div>
+                `
+                : `
+                    <div class="rps-waiting">
+
+                        <span class="status-dot"></span>
+
+                        <div>
+                            <strong>
+                                ОЖИДАНИЕ ХОДА ИГРОКА
+                            </strong>
+
+                            <small>
+                                Игрок ещё не выбрала вариант.
+                            </small>
+                        </div>
+
+                    </div>
+                `
+            }
+
+        </div>
+
+        ${
+            playerChoice && !operatorChoice
+            ? `
+                <div class="operator-action rps-operator-card">
+
+                    <div class="card-label">
+                        ВАШ ХОД
+                    </div>
+
+                    <h3>
+                        Выберите свой вариант
+                    </h3>
+
+                    <div class="choice-grid rps-choice-grid">
+
+                        <button
+                            class="choice rps-button"
+                            type="button"
+                            onclick="operatorRPS('rock')"
+                        >
+                            <span class="rps-button-icon">
+                                ✊
+                            </span>
+                            <span>
+                                КАМЕНЬ
+                            </span>
+                        </button>
+
+                        <button
+                            class="choice rps-button"
+                            type="button"
+                            onclick="operatorRPS('scissors')"
+                        >
+                            <span class="rps-button-icon">
+                                ✌️
+                            </span>
+                            <span>
+                                НОЖНИЦЫ
+                            </span>
+                        </button>
+
+                        <button
+                            class="choice rps-button"
+                            type="button"
+                            onclick="operatorRPS('paper')"
+                        >
+                            <span class="rps-button-icon">
+                                ✋
+                            </span>
+                            <span>
+                                БУМАГА
+                            </span>
+                        </button>
+
+                    </div>
+
+                </div>
+            `
+            : ""
+        }
+
+        ${
+            playerChoice && operatorChoice
+            ? `
+                <div class="operator-action">
+
+                    <div class="card-label">
+                        РЕЗУЛЬТАТ
+                    </div>
+
+                    <div class="rps-versus">
+
+                        <div class="rps-choice">
+
+                            <div class="rps-big-icon">
+                                ${rpsIcon(playerChoice)}
+                            </div>
+
+                            <span>
+                                ИГРОК
+                            </span>
+
+                            <strong>
+                                ${rpsName(playerChoice)}
+                            </strong>
+
+                        </div>
+
+                        <div class="rps-vs">
+                            VS
+                        </div>
+
+                        <div class="rps-choice">
+
+                            <div class="rps-big-icon">
+                                ${rpsIcon(operatorChoice)}
+                            </div>
+
+                            <span>
+                                ОПЕРАТОР
+                            </span>
+
+                            <strong>
+                                ${rpsName(operatorChoice)}
+                            </strong>
+
+                        </div>
+
+                    </div>
+
+                    <div class="rps-result">
+                        ${rpsWinner(
+                            playerChoice,
+                            operatorChoice
+                        )}
+                    </div>
+
+                    <button
+                        class="admin-btn"
+                        type="button"
+                        onclick="operatorNext()"
+                    >
+                        ✓ ПОДТВЕРДИТЬ ДУЭЛЬ
+                    </button>
+
+                </div>
+            `
+            : ""
+        }
+
+        ${globalPenaltyButtonHtml}
+
+        ${previousButton}
+    `;
+
+    return;
+}
+
+/* =====================================================
+   STAGE LIST
+===================================================== */
+
+function renderStageList() {
+
+    const box =
+        document.getElementById("stageList");
+
+    if (!box) {
+        return;
+    }
+
+    box.innerHTML =
+        stages
+            .map(stage => {
+
+                const active =
+                    stage.id === state.currentStage;
+
+                const done =
+                    state.completed.includes(stage.id);
+
+                return `
+                    <div class="
+                        stage-list-item
+                        ${active ? "active" : ""}
+                        ${done ? "done" : ""}
+                    ">
+
+                        <span>
+                            ${String(stage.id).padStart(2, "0")}
+                            —
+                            ${stage.title}
+                        </span>
+
+                        <span>
+                            ${
+                                done
+                                    ? "✓"
+                                    : active
+                                        ? "●"
+                                        : ""
+                            }
+                        </span>
+
+                    </div>
+                `;
+            })
+            .join("");
+}
+
+function renderOperatorLog() {
+
+    const container =
+        document.getElementById("operatorLog");
+
+    if (!container) {
+        return;
+    }
+
+    const sourceState =
+        operatorPlayerState ||
+        state;
+
+    const logs =
+        sourceState?.logs || [];
+
+    if (!Array.isArray(logs) || logs.length === 0) {
+
+        container.innerHTML = `
+            <div class="muted">
+                Журнал пока пуст.
+            </div>
+        `;
+
+        return;
+    }
+
+    container.innerHTML =
+        logs
+            .slice()
+            .reverse()
+            .map(log => {
+
+                // Если лог хранится обычной строкой
+                if (
+                    typeof log === "string"
+                ) {
+
+                    return `
+                        <div class="log-item">
+                            ${log}
+                        </div>
+                    `;
+                }
+
+
+                // Если лог хранится объектом
+                const text =
+                    log.text ??
+                    log.message ??
+                    log.title ??
+                    "";
+
+
+                const time =
+                    log.time ??
+                    log.timestamp ??
+                    "";
+
+
+                return `
+                    <div class="log-item">
+
+                        ${
+                            time
+                                ? `
+                                    <small>
+                                        ${time}
+                                    </small>
+                                  `
+                                : ""
+                        }
+
+                        <div>
+                            ${text}
+                        </div>
+
+                    </div>
+                `;
+
+            })
+            .join("");
+}
+
 
 /* =====================================================
    OPERATOR PENDING
@@ -1756,6 +2378,25 @@ if (pending.type === "timerReady") {
         </button>
     `;
 }
+
+
+function renderOperator() {
+    updateOperatorHeader();
+    renderOperatorControls();
+    renderStageList();
+    renderOperatorLog();
+
+    // Автоматически добавляем/обновляем контейнер модального окна
+    let modalContainer = document.getElementById("penaltyModalContainer");
+    if (!modalContainer) {
+        modalContainer = document.createElement("div");
+        modalContainer.id = "penaltyModalContainer";
+        document.body.appendChild(modalContainer);
+    }
+    modalContainer.innerHTML = renderPenaltyModal();
+}
+
+
 
 /* =====================================================
    ROLE
@@ -5632,595 +6273,14 @@ function openPenaltyModal() {
     }
 }
 
-function renderOperatorLog() {
 
-    const container =
-        document.getElementById("operatorLog");
 
-    if (!container) {
-        return;
-    }
 
-    const sourceState =
-        operatorPlayerState ||
-        state;
 
-    const logs =
-        sourceState?.logs || [];
 
-    if (!Array.isArray(logs) || logs.length === 0) {
 
-        container.innerHTML = `
-            <div class="muted">
-                Журнал пока пуст.
-            </div>
-        `;
 
-        return;
-    }
 
-    container.innerHTML =
-        logs
-            .slice()
-            .reverse()
-            .map(log => {
-
-                // Если лог хранится обычной строкой
-                if (
-                    typeof log === "string"
-                ) {
-
-                    return `
-                        <div class="log-item">
-                            ${log}
-                        </div>
-                    `;
-                }
-
-
-                // Если лог хранится объектом
-                const text =
-                    log.text ??
-                    log.message ??
-                    log.title ??
-                    "";
-
-
-                const time =
-                    log.time ??
-                    log.timestamp ??
-                    "";
-
-
-                return `
-                    <div class="log-item">
-
-                        ${
-                            time
-                                ? `
-                                    <small>
-                                        ${time}
-                                    </small>
-                                  `
-                                : ""
-                        }
-
-                        <div>
-                            ${text}
-                        </div>
-
-                    </div>
-                `;
-
-            })
-            .join("");
-}
-
-
-
-
-function updateOperatorHeader() {
-
-    const stage =
-        stages[
-            state.currentStage - 1
-        ];
-
-    const stageElement =
-        document.getElementById(
-            "operatorStage"
-        );
-
-    const numberElement =
-        document.getElementById(
-            "operatorStageNumber"
-        );
-
-    const nameElement =
-        document.getElementById(
-            "operatorStageName"
-        );
-
-    if (stageElement) {
-
-        stageElement.innerText =
-            `ЭТАП ${state.currentStage}`;
-    }
-
-    if (numberElement) {
-
-        numberElement.innerText =
-            String(
-                state.currentStage
-            ).padStart(
-                2,
-                "0"
-            );
-    }
-
-    if (nameElement) {
-
-        nameElement.innerText =
-            stage
-                ? stage.title
-                : "ЗАВЕРШЕНО";
-    }
-
-    const total =
-        state.currentStage >
-        EARLY_STAGES
-            ? TOTAL_STAGES
-            : EARLY_STAGES;
-
-    const bar =
-        document.getElementById(
-            "operatorProgressBar"
-        );
-
-    if (bar) {
-
-        bar.style.width =
-            `${
-                (
-                    (state.currentStage - 1)
-                    /
-                    total
-                ) * 100
-            }%`;
-    }
-}
-
-
-/* =====================================================
-   OPERATOR CONTROLS
-===================================================== */
-
-function renderOperatorControls() {
-
-    const box =
-        document.getElementById("operatorControls");
-
-    if (!box) return;
-
-    const playerState =
-        operatorPlayerState;
-
-    if (!playerState) {
-        box.innerHTML = `
-            <div class="instruction">
-                ⏳ ОЖИДАНИЕ ПОДКЛЮЧЕНИЯ ИГРОКА
-            </div>
-        `;
-        return;
-    }
-
-    const stage =
-        stages[playerState.currentStage - 1];
-
-    if (!stage) return;
-
-    // =====================================================
-    // ПРЕДЫДУЩИЙ ЭТАП
-    // =====================================================
-
-    const previousButton =
-        playerState.currentStage > 1
-            ? `
-                <button
-                    class="admin-btn secondary"
-                    type="button"
-                    onclick="operatorPrevious()"
-                >
-                    ← ПРЕДЫДУЩИЙ ЭТАП
-                </button>
-            `
-            : "";
-    
-
-    // =====================================================
-    // ЭТАП 14 (GUESS GAME)
-    // =====================================================
-   if (stage.id === 14) {
-
-    box.innerHTML = `
-        <div class="panel-title">
-            GUESS GAME
-        </div>
-
-        <div class="guess-admin-card">
-
-            <div class="guess-admin-title">
-                🔐 ЗАГАДАТЬ ЧИСЛО
-            </div>
-
-            <p>
-                Игрок будет угадывать число от 1 до 18.
-            </p>
-
-            <input
-                id="operatorGuessNumber"
-                class="answer-input"
-                type="number"
-                min="1"
-                max="18"
-                placeholder="1 — 18"
-            >
-
-            <button
-                class="admin-btn"
-                type="button"
-                onclick="setGuessNumber()"
-            >
-                🔒 ЗАПЕЧАТАТЬ ЧИСЛО
-            </button>
-
-        </div>
-    `;
-
-    return;
-}
-
-    // =====================================================
-    // ФИНАЛ
-    // =====================================================
-
-    if (stage.type === "final") {
-        box.innerHTML = `
-            <div class="panel-title">
-                ДЕЛО ЗАКРЫТО
-            </div>
-
-            <div class="success-box">
-                ✓ 17 игровых этапов завершены.
-            </div>
-        `;
-        return;
-    }
-
-
-
-    
-
-    // =====================================================
-    // PENDING OPERATOR
-    // =====================================================
-
-if (
-    playerState.pendingOperator &&
-    playerState.pendingOperator.stage === playerState.currentStage
-) {
-
-    const pendingType =
-        playerState.pendingOperator.type;
-
-    if (pendingType === "penaltyAssigned") {
-
-        box.innerHTML = `
-            <div class="panel-title">
-                НАКАЗАНИЕ
-            </div>
-
-            <div class="operator-action">
-
-                <h3>⚠ НАЗНАЧЕН ШТРАФ</h3>
-
-                <p>
-                    <b>${playerState.penalty || "Штраф не указан"}</b>
-                </p>
-
-                ${
-                    playerState.penaltyCompleted
-                        ? `
-                            <div class="success-box">
-                                ✓ Игрок выполнила штраф.
-                            </div>
-
-                            <button
-                                class="admin-btn"
-                                type="button"
-                                onclick="confirmPenalty()"
-                            >
-                                ✓ ПОДТВЕРДИТЬ ВЫПОЛНЕНИЕ
-                            </button>
-                        `
-                        : `
-                            <div class="instruction">
-                                ⏳ Ожидается выполнение штрафа игроком.
-                            </div>
-                        `
-                }
-
-            </div>
-
-            ${previousButton}
-        `;
-
-        return;
-    }
-
-    if (pendingType === "penaltyCompleted") {
-
-        box.innerHTML = `
-            <div class="panel-title">
-                НАКАЗАНИЕ ВЫПОЛНЕНО
-            </div>
-
-            <div class="success-box">
-                ✓ Наказание подтверждено
-            </div>
-
-            <button
-                class="admin-btn"
-                type="button"
-                onclick="restartStageAfterPenalty()"
-            >
-                ↻ НАЧАТЬ ЭТАП ЗАНОВО
-            </button>
-
-            ${previousButton}
-        `;
-
-        return;
-    }
-
-    box.innerHTML = `
-        <div class="panel-title">
-            ТРЕБУЕТСЯ ВАШЕ ДЕЙСТВИЕ
-        </div>
-
-        ${renderOperatorPending(stage)}
-
-        <br>
-
-        ${previousButton}
-
-        ${globalPenaltyButtonHtml}
-    `;
-
-    return;
-}
-
-    // =====================================================
-    // TIMER — ЭТАП 9
-    // =====================================================
-
-    if (stage.id === 9) {
-
-        box.innerHTML = `
-            <div class="panel-title">
-                ИСПЫТАНИЕ НА 18 СЕКУНД
-            </div>
-
-            ${renderTimerOperatorControls()}
-
-            ${globalPenaltyButtonHtml}
-
-            ${previousButton}
-        `;
-
-        return;
-    }
-
-    // =====================================================
-    // RPS — ЭТАП 12
-    // =====================================================
-
-if (stage.id === 12) {
-
-    const playerChoice = state.rpsPlayer;
-    const operatorChoice = state.rpsOperator;
-
-    box.innerHTML = `
-
-        <div class="panel-title">
-            BATTLE PROTOCOL
-        </div>
-
-        <div class="operator-action rps-operator-card">
-
-            <div class="card-label">
-                ДУЭЛЬ // ОПЕРАТОР
-            </div>
-
-            ${
-                playerChoice
-                ? `
-                    <div class="rps-player-move">
-
-                        <div class="rps-big-icon">
-                            ${rpsIcon(playerChoice)}
-                        </div>
-
-                        <div>
-                            <span>
-                                ХОД ИГРОКА
-                            </span>
-
-                            <strong>
-                                ${rpsName(playerChoice)}
-                            </strong>
-                        </div>
-
-                    </div>
-                `
-                : `
-                    <div class="rps-waiting">
-
-                        <span class="status-dot"></span>
-
-                        <div>
-                            <strong>
-                                ОЖИДАНИЕ ХОДА ИГРОКА
-                            </strong>
-
-                            <small>
-                                Игрок ещё не выбрала вариант.
-                            </small>
-                        </div>
-
-                    </div>
-                `
-            }
-
-        </div>
-
-        ${
-            playerChoice && !operatorChoice
-            ? `
-                <div class="operator-action rps-operator-card">
-
-                    <div class="card-label">
-                        ВАШ ХОД
-                    </div>
-
-                    <h3>
-                        Выберите свой вариант
-                    </h3>
-
-                    <div class="choice-grid rps-choice-grid">
-
-                        <button
-                            class="choice rps-button"
-                            type="button"
-                            onclick="operatorRPS('rock')"
-                        >
-                            <span class="rps-button-icon">
-                                ✊
-                            </span>
-                            <span>
-                                КАМЕНЬ
-                            </span>
-                        </button>
-
-                        <button
-                            class="choice rps-button"
-                            type="button"
-                            onclick="operatorRPS('scissors')"
-                        >
-                            <span class="rps-button-icon">
-                                ✌️
-                            </span>
-                            <span>
-                                НОЖНИЦЫ
-                            </span>
-                        </button>
-
-                        <button
-                            class="choice rps-button"
-                            type="button"
-                            onclick="operatorRPS('paper')"
-                        >
-                            <span class="rps-button-icon">
-                                ✋
-                            </span>
-                            <span>
-                                БУМАГА
-                            </span>
-                        </button>
-
-                    </div>
-
-                </div>
-            `
-            : ""
-        }
-
-        ${
-            playerChoice && operatorChoice
-            ? `
-                <div class="operator-action">
-
-                    <div class="card-label">
-                        РЕЗУЛЬТАТ
-                    </div>
-
-                    <div class="rps-versus">
-
-                        <div class="rps-choice">
-
-                            <div class="rps-big-icon">
-                                ${rpsIcon(playerChoice)}
-                            </div>
-
-                            <span>
-                                ИГРОК
-                            </span>
-
-                            <strong>
-                                ${rpsName(playerChoice)}
-                            </strong>
-
-                        </div>
-
-                        <div class="rps-vs">
-                            VS
-                        </div>
-
-                        <div class="rps-choice">
-
-                            <div class="rps-big-icon">
-                                ${rpsIcon(operatorChoice)}
-                            </div>
-
-                            <span>
-                                ОПЕРАТОР
-                            </span>
-
-                            <strong>
-                                ${rpsName(operatorChoice)}
-                            </strong>
-
-                        </div>
-
-                    </div>
-
-                    <div class="rps-result">
-                        ${rpsWinner(
-                            playerChoice,
-                            operatorChoice
-                        )}
-                    </div>
-
-                    <button
-                        class="admin-btn"
-                        type="button"
-                        onclick="operatorNext()"
-                    >
-                        ✓ ПОДТВЕРДИТЬ ДУЭЛЬ
-                    </button>
-
-                </div>
-            `
-            : ""
-        }
-
-        ${globalPenaltyButtonHtml}
-
-        ${previousButton}
-    `;
-
-    return;
-}
 
 
 function showPlayerGuessControls() {
@@ -8312,57 +8372,7 @@ function initFinalCardGame() {
 }
 
 
-/* =====================================================
-   STAGE LIST
-===================================================== */
 
-function renderStageList() {
-
-    const box =
-        document.getElementById("stageList");
-
-    if (!box) {
-        return;
-    }
-
-    box.innerHTML =
-        stages
-            .map(stage => {
-
-                const active =
-                    stage.id === state.currentStage;
-
-                const done =
-                    state.completed.includes(stage.id);
-
-                return `
-                    <div class="
-                        stage-list-item
-                        ${active ? "active" : ""}
-                        ${done ? "done" : ""}
-                    ">
-
-                        <span>
-                            ${String(stage.id).padStart(2, "0")}
-                            —
-                            ${stage.title}
-                        </span>
-
-                        <span>
-                            ${
-                                done
-                                    ? "✓"
-                                    : active
-                                        ? "●"
-                                        : ""
-                            }
-                        </span>
-
-                    </div>
-                `;
-            })
-            .join("");
-}
 
 
 /* =====================================================
