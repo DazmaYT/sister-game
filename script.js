@@ -2985,9 +2985,31 @@ function renderTimerStage(stage) {
 
         if (state.timerRunning && state.timerStartedAt) {
 
-            if (!document.getElementById("timerNumber")) {
-                box.innerHTML = `...карточка с id="timerNumber"...`;
-            }
+            box.innerHTML = `
+                <div class="card">
+
+                    <div class="card-label">
+                        SPEED PROTOCOL / LIVE
+                    </div>
+
+                    <div class="answer-title">
+                        ${task.title}
+                    </div>
+
+                    <p>
+                        ${task.text}
+                    </p>
+
+                    <div id="timerNumber" class="timer">
+                        --
+                    </div>
+
+                    <div class="instruction">
+                        Выполняй задание.
+                    </div>
+
+                </div>
+            `;
 
             clearInterval(timerInterval);
 
@@ -3198,18 +3220,18 @@ function startPlayerTimer() {
         "Игрок начала испытание на 18 секунд"
     );
 
-    saveState();
+saveState();
 
-    renderPlayer();
+renderPlayer();
 
-    clearInterval(timerInterval);
+clearInterval(timerInterval);
 
-    timerInterval =
-        setInterval(
-            updateRunningTimer,
-            100
-        );
-}
+updateRunningTimer();
+
+timerInterval = setInterval(
+    updateRunningTimer,
+    100
+);
 
 
 function updateRunningTimer() {
@@ -3293,6 +3315,9 @@ function updateRunningTimer() {
         state.timerFinished = true;
         state.timerRunning = false;
         state.timerReady = false;
+        state.timerStartedAt = null;
+
+        renderPlayer();
 
         addLog(
             "18 секунд завершены"
