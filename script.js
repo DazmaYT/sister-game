@@ -1036,51 +1036,69 @@ if (
        // ==========================================
         // ОПЕРАТОР → ИГРОК
         // ==========================================
-       if (message.type === "operatorState") {
+      if (message.type === "operatorState") {
 
-            if (currentRole !== "player") {
-                return;
-            }
+    if (currentRole !== "player") {
+        return;
+    }
 
-            if (!message.state) {
-                return;
-            }
+    if (!message.state) {
+        console.warn("⚠️ operatorState без state");
+        return;
+    }
 
-            console.log("🔄 Получено состояние от оператора:", message.state);
+    console.log(
+        "🔄 Получено состояние от оператора:",
+        message.state
+    );
 
-            isReceivingRemoteState = true;
+    console.log(
+        "🎮 Этап:",
+        message.state.currentStage
+    );
 
-            // ИСПРАВЛЕНИЕ 2: Корректно объединяем стейт, сохраняя текущий этап и переданные данные
-            state = {
-                ...state,
-                ...message.state
-            };
+    isReceivingRemoteState = true;
 
-            localStorage.setItem(
-                STORAGE_KEY,
-                JSON.stringify(state)
-            );
+    state = {
+        ...state,
+        ...message.state
+    };
 
-            renderPlayer();
+    // Защита от неправильного currentStage
+    if (
+        !Number.isInteger(state.currentStage) ||
+        state.currentStage < 1
+    ) {
+        state.currentStage = 1;
+    }
 
-            if (
-                state.timerRunning &&
-                state.timerStartedAt
-            ) {
-                clearInterval(timerInterval);
-                timerInterval = setInterval(
-                    updateRunningTimer,
-                    100
-                );
-                updateRunningTimer();
-            }
+    localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify(state)
+    );
 
-            setTimeout(() => {
-                isReceivingRemoteState = false;
-            }, 100);
+    renderPlayer();
 
-            return;
-        }
+    if (
+        state.timerRunning &&
+        state.timerStartedAt
+    ) {
+        clearInterval(timerInterval);
+
+        timerInterval = setInterval(
+            updateRunningTimer,
+            100
+        );
+
+        updateRunningTimer();
+    }
+
+    setTimeout(() => {
+        isReceivingRemoteState = false;
+    }, 100);
+
+    return;
+}
 
         // ==========================================
     // ОПЕРАТОР ЗАПУСТИЛ ТАЙМЕР
@@ -2449,6 +2467,12 @@ function renderOperator() {
 ===================================================== */
 
 function renderPlayer() {
+            console.log("========== PLAYER RENDER ==========");
+            console.log("state:", state);
+            console.log("currentStage:", state?.currentStage);
+            console.log("stages:", stages);
+            console.log("stage:", stages?.[state?.currentStage - 1]);
+            console.log("==================================");
 
     // =========================================
     // ОСТАНАВЛИВАЕМ СТАРЫЙ ИНТЕРВАЛ
@@ -8139,17 +8163,25 @@ async function operatorNext() {
     }
 
     if (!operatorPlayerState) {
-        console.warn("⚠️ Состояние игрока ещё не получено");
+        console.warn(
+            "⚠️ Состояние игрока ещё не получено"
+        );
         return;
     }
 
     const currentStage =
-        operatorPlayerState.currentStage || 1;
+        Number(operatorPlayerState.currentStage) || 1;
 
-    operatorPlayerState.pendingOperator = null;
-
-    operatorPlayerState.currentStage =
+    const nextStage =
         currentStage + 1;
+
+    operatorPlayerState = {
+        ...operatorPlayerState,
+
+        currentStage: nextStage,
+
+        pendingOperator: null
+    };
 
     state = {
         ...operatorPlayerState
@@ -8160,6 +8192,13 @@ async function operatorNext() {
         JSON.stringify(operatorPlayerState)
     );
 
+    console.log(
+        "➡️ Оператор перевёл игрока:",
+        currentStage,
+        "→",
+        nextStage
+    );
+
     sendOperatorState(
         operatorPlayerState
     );
@@ -8167,7 +8206,9 @@ async function operatorNext() {
     renderOperator();
 }
 
-
+window.operatorNext = operatorNext;
+window.selectRole = selectRole;
+window.resetLocalGame = resetLocalGame;
 /* =====================================================
    PREVIOUS
 ===================================================== */
