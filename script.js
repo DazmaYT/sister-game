@@ -775,10 +775,6 @@ var state = JSON.parse(localStorage.getItem("case18_state")) || {
     completed: []
 };
 
-// Константы для этапов (если их не было)
-const EARLY_STAGES = 5;
-const TOTAL_STAGES = 11;
-
 
 function selectRole(role) {
     currentRole = role;
