@@ -2586,55 +2586,41 @@ if (
 ===================================================== */
 
 function updatePlayerProgress() {
+    // Безопасные значения на случай, если константы не объявлены
+    const early = typeof EARLY_STAGES !== "undefined" ? EARLY_STAGES : 5;
+    const total = typeof TOTAL_STAGES !== "undefined" ? TOTAL_STAGES : 11;
+    const current = state && state.currentStage ? state.currentStage : 1;
 
     const unlocked =
-        state.currentStage > EARLY_STAGES
-            ? TOTAL_STAGES
-            : EARLY_STAGES;
+        current > early
+            ? total
+            : early;
 
     const percent =
         Math.round(
             (
-                (state.currentStage - 1)
+                (current - 1)
                 /
                 unlocked
             ) * 100
         );
 
-    const progress =
-        document.getElementById(
-            "playerProgress"
-        );
-
-    const percentElement =
-        document.getElementById(
-            "playerPercent"
-        );
-
-    const bar =
-        document.getElementById(
-            "playerProgressBar"
-        );
+    const progress = document.getElementById("playerProgress");
+    const percentElement = document.getElementById("playerPercent");
+    const bar = document.getElementById("playerProgressBar");
 
     if (progress) {
-
-        progress.innerText =
-            `ЭТАП ${state.currentStage} / ${unlocked}`;
+        progress.innerText = `ЭТАП ${current} / ${unlocked}`;
     }
 
     if (percentElement) {
-
-        percentElement.innerText =
-            `${percent}%`;
+        percentElement.innerText = `${percent}%`;
     }
 
     if (bar) {
-
-        bar.style.width =
-            `${percent}%`;
+        bar.style.width = `${percent}%`;
     }
 }
-
 
 /* =====================================================
    STAGE TYPES
