@@ -761,7 +761,36 @@ try {
 let isReceivingRemoteState = false;
 let lastSentState = null;
 
+function selectRole(role) {
+    currentRole = role;
+    
+    // Безопасно переключаем экраны
+    const roleScreen = document.getElementById('roleScreen');
+    const playerScreen = document.getElementById('playerScreen');
+    const operatorScreen = document.getElementById('operatorScreen');
 
+    if (roleScreen) roleScreen.classList.remove('active');
+
+    if (role === 'player') {
+        if (playerScreen) playerScreen.classList.add('active');
+        
+        // Проверяем, существует ли функция перед вызовом
+        if (typeof renderPlayer === 'function') {
+            renderPlayer();
+        } else {
+            console.warn("⚠️ Функция renderPlayer ещё загружается или не найдена");
+        }
+
+    } else if (role === 'operator') {
+        if (operatorScreen) operatorScreen.classList.add('active');
+        
+        if (typeof renderOperator === 'function') {
+            renderOperator();
+        } else {
+            console.warn("⚠️ Функция renderOperator ещё загружается или не найдена");
+        }
+    }
+}
 // ==========================================
 // ИДЕНТИФИКАЦИЯ
 // ==========================================
@@ -2402,31 +2431,7 @@ function renderOperator() {
    ROLE
 ===================================================== */
 
-function selectRole(role) {
-    currentRole = role;
 
-    if (typeof syncSocket !== "undefined" && syncSocket.readyState === WebSocket.OPEN) {
-        syncSocket.send(
-            JSON.stringify({
-                type: "identify",
-                role: currentRole
-            })
-        );
-        console.log("👤 Роль отправлена:", currentRole);
-    }
-
-    document.querySelectorAll(".screen").forEach(x => x.classList.remove("active"));
-
-    if (role === "player") {
-        document.getElementById("playerScreen").classList.add("active");
-        renderPlayer();
-    }
-
-    if (role === "operator") {
-        document.getElementById("operatorScreen").classList.add("active");
-        renderOperator();
-    }
-}
 
 
 function backToRoles() {
