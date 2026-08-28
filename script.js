@@ -762,13 +762,7 @@ let isReceivingRemoteState = false;
 let lastSentState = null;
 
 
-// Безопасное состояние игрока, чтобы код никогда не падал
-var operatorPlayerState = {
-    currentStage: 1,
-    timerReady: false,
-    timerRunning: false,
-    completed: []
-};
+
 
 var state = JSON.parse(localStorage.getItem("case18_state")) || {
     currentStage: 1,
