@@ -1,858 +1,159 @@
-const http = require("http");
-const fs = require("fs");
-const path = require("path");
-const WebSocket = require("ws");
-const { Pool } = require("pg");
-
-
 // =====================================================
-// POSTGRESQL
+// CLIENT-SIDE GAME LOGIC
 // =====================================================
 
-const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: {
-        rejectUnauthorized: false
-    }
-});
+const isLocal = window.location.hostname === 'localhost' || 
+                window.location.hostname === '127.0.0.1' || 
+                window.location.protocol === 'file:';
 
-const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.protocol === 'file:';
 const wsProtocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
-const wsHost = (window.location.host && window.location.host !== '') ? window.location.host : 'localhost:3000';
+const wsHost = (window.location.host && window.location.host !== '') ? 
+               window.location.host : 'localhost:3000';
 
-var syncSocket = null;
+let syncSocket = null;
+
 try {
     syncSocket = new WebSocket(`${wsProtocol}${wsHost}`);
 } catch (err) {
     console.warn("WebSocket сервер недоступен, работаем локально");
 }
-// =====================================================
-// PORT
-// =====================================================
-
-const PORT = process.env.PORT || 3000;
-
 
 // =====================================================
-// СОСТОЯНИЕ ИГРЫ
+// WEBSOCKET HANDLERS
 // =====================================================
 
-let gameState = null;
-
-
-// =====================================================
-// DATABASE INIT
-// =====================================================
-
-async function initDatabase() {
-
-    try {
-
-        await pool.query(`
-            CREATE TABLE IF NOT EXISTS game_state (
-                id INTEGER PRIMARY KEY,
-                state JSONB NOT NULL,
-                updated_at TIMESTAMP DEFAULT NOW()
-            )
-        `);
-
-        console.log(
-            "💾 PostgreSQL: таблица game_state готова"
-        );
-
-
-        const result = await pool.query(`
-            SELECT state
-            FROM game_state
-            WHERE id = 1
-        `);
-
-
-        if (result.rows.length > 0) {
-
-            gameState = result.rows[0].state;
-
-            console.log(
-                "🔄 Состояние игры загружено из PostgreSQL"
-            );
-
-        } else {
-
-            console.log(
-                "📭 В PostgreSQL сохранённой игры нет"
-            );
-        }
-
-    } catch (error) {
-
-        console.error(
-            "❌ Ошибка PostgreSQL:",
-            error
-        );
-
-        throw error;
-    }
-}
-
-
-// =====================================================
-// SAVE GAME STATE
-// =====================================================
-
-async function saveGameState() {
-
-    if (!gameState) {
-        return;
-    }
-
-    try {
-
-        await pool.query(
-            `
-            INSERT INTO game_state
-                (id, state, updated_at)
-
-            VALUES
-                (1, $1, NOW())
-
-            ON CONFLICT (id)
-
-            DO UPDATE SET
-                state = EXCLUDED.state,
-                updated_at = NOW()
-            `,
-            [
-                JSON.stringify(gameState)
-            ]
-        );
-
-        console.log(
-            "💾 Состояние сохранено в PostgreSQL"
-        );
-
-    } catch (error) {
-
-        console.error(
-            "❌ Ошибка сохранения:",
-            error
-        );
-    }
-}
-
-
-// =====================================================
-// ПОЛНЫЙ RESET DATABASE
-// =====================================================
-
-async function resetDatabase() {
-
-    console.log(
-        "🗑️ НАЧИНАЕМ ПОЛНЫЙ СБРОС"
-    );
-
-    // Сначала память сервера
-    gameState = null;
-
-    // Затем база
-    await pool.query(`
-        DELETE FROM game_state
-        WHERE id = 1
-    `);
-
-    // Дополнительно VACUUM здесь НЕ нужен:
-    // DELETE полностью удаляет запись id=1.
-
-    console.log(
-        "✅ PostgreSQL: game_state полностью очищен"
-    );
-}
-
-
-// =====================================================
-// HTTP SERVER
-// =====================================================
-
-const server = http.createServer((req, res) => {
-
-    let filePath;
-
-    try {
-
-        if (req.url === "/") {
-
-            filePath = path.join(
-                __dirname,
-                "index.html"
-            );
-
-        } else {
-
-            const requestedPath =
-                decodeURIComponent(
-                    req.url.split("?")[0]
-                );
-
-            filePath = path.join(
-                __dirname,
-                requestedPath
-            );
-        }
-
-    } catch (error) {
-
-        res.writeHead(
-            400,
-            {
-                "Content-Type":
-                    "text/plain; charset=utf-8"
-            }
-        );
-
-        res.end(
-            "Некорректный путь"
-        );
-
-        return;
-    }
-
-
-    const ext =
-        path.extname(filePath);
-
-
-    const contentTypes = {
-
-        ".html":
-            "text/html; charset=utf-8",
-
-        ".js":
-            "text/javascript; charset=utf-8",
-
-        ".css":
-            "text/css; charset=utf-8",
-
-        ".json":
-            "application/json; charset=utf-8",
-
-        ".png":
-            "image/png",
-
-        ".jpg":
-            "image/jpeg",
-
-        ".jpeg":
-            "image/jpeg",
-
-        ".svg":
-            "image/svg+xml",
-
-        ".ico":
-            "image/x-icon"
+if (syncSocket) {
+    syncSocket.onopen = () => {
+        console.log("✅ WebSocket подключен");
     };
 
-
-    const contentType =
-        contentTypes[ext] ||
-        "text/plain; charset=utf-8";
-
-
-    fs.readFile(
-        filePath,
-        (error, data) => {
-
-            if (error) {
-
-                res.writeHead(
-                    404,
-                    {
-                        "Content-Type":
-                            "text/plain; charset=utf-8"
-                    }
-                );
-
-                res.end(
-                    "Файл не найден"
-                );
-
-                return;
-            }
-
-
-            res.writeHead(
-                200,
-                {
-                    "Content-Type":
-                        contentType,
-
-                    "Cache-Control":
-                        "no-store, no-cache, must-revalidate, proxy-revalidate",
-
-                    "Pragma":
-                        "no-cache",
-
-                    "Expires":
-                        "0"
-                }
-            );
-
-
-            res.end(data);
+    syncSocket.onmessage = (event) => {
+        try {
+            const data = JSON.parse(event.data);
+            handleServerMessage(data);
+        } catch (error) {
+            console.error("❌ Ошибка парсинга сообщения:", error);
         }
-    );
-});
+    };
 
+    syncSocket.onerror = (error) => {
+        console.error("❌ WebSocket ошибка:", error);
+    };
+
+    syncSocket.onclose = () => {
+        console.warn("⚠️ WebSocket соединение закрыто");
+    };
+}
 
 // =====================================================
-// WEBSOCKET
+// SEND MESSAGE TO SERVER
 // =====================================================
 
-const wss =
-    new WebSocket.Server({
-        server
+function sendToServer(data) {
+    if (syncSocket && syncSocket.readyState === WebSocket.OPEN) {
+        try {
+            syncSocket.send(JSON.stringify(data));
+        } catch (error) {
+            console.error("❌ Ошибка отправки:", error);
+        }
+    } else {
+        console.warn("⚠️ WebSocket не подключен");
+    }
+}
+
+// =====================================================
+// HANDLE SERVER MESSAGES
+// =====================================================
+
+function handleServerMessage(data) {
+    if (!data || !data.type) {
+        return;
+    }
+
+    console.log("📨 Получено сообщение:", data.type);
+
+    switch (data.type) {
+        case "gameState":
+            handleGameState(data.state);
+            break;
+        case "operatorState":
+            handleOperatorState(data.state);
+            break;
+        case "gameReset":
+            handleGameReset();
+            break;
+        default:
+            console.warn("⚠️ Неизвестный тип сообщения:", data.type);
+    }
+}
+
+// =====================================================
+// GAME STATE HANDLERS
+// =====================================================
+
+function handleGameState(state) {
+    if (!state) return;
+    
+    console.log("🎮 Получено состояние игры:", state);
+    // Implement game state update logic here
+}
+
+function handleOperatorState(state) {
+    if (!state) return;
+    
+    console.log("👤 Получено состояние оператора:", state);
+    // Implement operator state update logic here
+}
+
+function handleGameReset() {
+    console.log("🗑️ Сброс игры получен");
+    // Implement reset logic here
+}
+
+// =====================================================
+// IDENTIFY CLIENT ROLE
+// =====================================================
+
+function identifyRole(role) {
+    if (role !== "player" && role !== "operator") {
+        console.error("❌ Неверная роль:", role);
+        return;
+    }
+
+    sendToServer({
+        type: "identify",
+        role: role
     });
 
+    console.log("✅ Роль отправлена:", role);
+}
 
 // =====================================================
-// SEND
+// RESET GAME (OPERATOR ONLY)
 // =====================================================
 
-function send(socket, data) {
+function resetGame() {
+    sendToServer({
+        type: "resetGame"
+    });
 
-    if (
-        !socket ||
-        socket.readyState !== WebSocket.OPEN
-    ) {
+    console.log("🗑️ Команда сброса отправлена");
+}
+
+// =====================================================
+// SEND GAME ACTION
+// =====================================================
+
+function sendGameAction(action) {
+    if (!action || !action.type) {
+        console.error("❌ Некорректное действие");
         return;
     }
 
-    try {
+    sendToServer({
+        type: "action",
+        action: action
+    });
 
-        socket.send(
-            JSON.stringify(data)
-        );
-
-    } catch (error) {
-
-        console.error(
-            "❌ Ошибка отправки WebSocket:",
-            error
-        );
-    }
+    console.log("📤 Действие отправлено:", action.type);
 }
-
-
-// =====================================================
-// SEND STATE TO PLAYER
-// =====================================================
-
-function sendToPlayer() {
-
-    if (!gameState) {
-        return;
-    }
-
-
-    for (const client of wss.clients) {
-
-        if (
-            client.role === "player" &&
-            client.readyState === WebSocket.OPEN
-        ) {
-
-            send(
-                client,
-                {
-                    type: "operatorState",
-                    state: gameState
-                }
-            );
-        }
-    }
-}
-
-
-// =====================================================
-// SEND STATE TO OPERATOR
-// =====================================================
-
-function sendToOperator() {
-
-    if (!gameState) {
-        return;
-    }
-
-
-    for (const client of wss.clients) {
-
-        if (
-            client.role === "operator" &&
-            client.readyState === WebSocket.OPEN
-        ) {
-
-            send(
-                client,
-                {
-                    type: "gameState",
-                    state: gameState
-                }
-            );
-        }
-    }
-}
-
-
-// =====================================================
-// SEND RESET TO EVERYONE
-// =====================================================
-
-function sendGameReset() {
-
-    console.log(
-        "📢 Отправляем gameReset всем клиентам"
-    );
-
-
-    for (const client of wss.clients) {
-
-        if (
-            client.readyState === WebSocket.OPEN
-        ) {
-
-            send(
-                client,
-                {
-                    type: "gameReset"
-                }
-            );
-        }
-    }
-}
-
-
-// =====================================================
-// CONNECTION
-// =====================================================
-
-wss.on(
-    "connection",
-    (socket) => {
-
-        console.log(
-            "🟢 Новое WebSocket подключение"
-        );
-
-
-        socket.role = null;
-
-
-        // =================================================
-        // MESSAGE
-        // =================================================
-
-        socket.on(
-            "message",
-            async (message) => {
-
-                try {
-
-                    const data =
-                        JSON.parse(
-                            message.toString()
-                        );
-
-
-                    if (
-                        !data ||
-                        typeof data.type !== "string"
-                    ) {
-
-                        return;
-                    }
-
-
-                    console.log(
-                        "📨 Получено:",
-                        data.type
-                    );
-
-
-                    // =========================================
-                    // IDENTIFY
-                    // =========================================
-
-                    if (
-                        data.type === "identify"
-                    ) {
-
-                        if (
-                            data.role !== "player" &&
-                            data.role !== "operator"
-                        ) {
-
-                            console.warn(
-                                "⚠️ Неверная роль:",
-                                data.role
-                            );
-
-                            return;
-                        }
-
-
-                        socket.role =
-                            data.role;
-
-
-                        console.log(
-                            "👤 Роль:",
-                            socket.role
-                        );
-
-
-                        /*
-                         * ВАЖНО:
-                         *
-                         * Если gameState === null,
-                         * НИЧЕГО игроку не отправляем.
-                         *
-                         * Это означает, что после полного reset
-                         * новый игрок НЕ получит старый этап.
-                         */
-
-                        if (gameState) {
-
-                            if (
-                                socket.role === "player"
-                            ) {
-
-                                send(
-                                    socket,
-                                    {
-                                        type:
-                                            "operatorState",
-
-                                        state:
-                                            gameState
-                                    }
-                                );
-                            }
-
-
-                            if (
-                                socket.role === "operator"
-                            ) {
-
-                                send(
-                                    socket,
-                                    {
-                                        type:
-                                            "gameState",
-
-                                        state:
-                                            gameState
-                                    }
-                                );
-                            }
-                        }
-
-
-                        return;
-                    }
-
-
-                    // =========================================
-                    // RESET GAME
-                    // =========================================
-
-                    if (
-                        data.type === "resetGame"
-                    ) {
-
-                        if (
-                            socket.role !== "operator"
-                        ) {
-
-                            console.warn(
-                                "⚠️ resetGame пришёл не от оператора"
-                            );
-
-                            return;
-                        }
-
-
-                        console.log(
-                            "🗑️ ОПЕРАТОР НАЖАЛ ПОЛНЫЙ СБРОС"
-                        );
-
-
-                        try {
-
-                            /*
-                             * 1. Удаляем состояние
-                             *    из памяти Node.js.
-                             */
-
-                            gameState = null;
-
-
-                            /*
-                             * 2. Удаляем состояние
-                             *    из PostgreSQL.
-                             */
-
-                            await pool.query(`
-                                DELETE FROM game_state
-                                WHERE id = 1
-                            `);
-
-
-                            /*
-                             * 3. Проверяем,
-                             *    что запись действительно удалена.
-                             */
-
-                            const check =
-                                await pool.query(`
-                                    SELECT id
-                                    FROM game_state
-                                    WHERE id = 1
-                                `);
-
-
-                            if (check.rows.length > 0) {
-
-                                throw new Error(
-                                    "Запись game_state всё ещё существует после DELETE"
-                                );
-                            }
-
-
-                            console.log(
-                                "✅ PostgreSQL полностью очищен"
-                            );
-
-
-                            /*
-                             * 4. Отправляем reset
-                             *    ВСЕМ подключённым клиентам.
-                             */
-
-                            sendGameReset();
-
-
-                            console.log(
-                                "✅ ПОЛНЫЙ СБРОС ВЫПОЛНЕН"
-                            );
-
-                        } catch (error) {
-
-                            console.error(
-                                "❌ Ошибка полного сброса:",
-                                error
-                            );
-
-
-                            send(
-                                socket,
-                                {
-                                    type: "resetError",
-
-                                    message:
-                                        "Не удалось полностью очистить игру"
-                                }
-                            );
-                        }
-
-
-                        return;
-                    }
-
-
-                    // =========================================
-                    // PLAYER → SERVER
-                    // =========================================
-
-                    if (
-                        data.type === "gameState"
-                    ) {
-
-                        if (
-                            socket.role !== "player"
-                        ) {
-
-                            console.warn(
-                                "⚠️ gameState пришёл не от игрока"
-                            );
-
-                            return;
-                        }
-
-
-                        if (!data.state) {
-                            return;
-                        }
-
-
-                        /*
-                         * Если состояние уже было сброшено,
-                         * игрок может создать новое состояние.
-                         */
-
-                        gameState =
-                            data.state;
-
-
-                        console.log(
-                            "🎮 Состояние игрока получено"
-                        );
-
-
-                        await saveGameState();
-
-
-                        sendToOperator();
-
-
-                        return;
-                    }
-
-
-                    // =========================================
-                    // OPERATOR → SERVER
-                    // =========================================
-
-                    if (
-                        data.type === "operatorState"
-                    ) {
-
-                        if (
-                            socket.role !== "operator"
-                        ) {
-
-                            console.warn(
-                                "⚠️ operatorState пришёл не от оператора"
-                            );
-
-                            return;
-                        }
-
-
-                        if (!data.state) {
-                            return;
-                        }
-
-
-                        gameState =
-                            data.state;
-
-
-                        console.log(
-                            "🖥️ Состояние изменено оператором"
-                        );
-
-
-                        await saveGameState();
-
-
-                        sendToPlayer();
-
-
-                        return;
-                    }
-
-
-                    // =========================================
-                    // UNKNOWN MESSAGE
-                    // =========================================
-
-                    console.warn(
-                        "⚠️ Неизвестный тип:",
-                        data.type
-                    );
-
-                } catch (error) {
-
-                    console.error(
-                        "❌ Ошибка обработки сообщения:",
-                        error
-                    );
-                }
-            }
-        );
-
-
-        // =================================================
-        // CLOSE
-        // =================================================
-
-        socket.on(
-            "close",
-            () => {
-
-                console.log(
-                    "🔴 Клиент отключён:",
-                    socket.role ||
-                    "неизвестный"
-                );
-            }
-        );
-
-
-        // =================================================
-        // ERROR
-        // =================================================
-
-        socket.on(
-            "error",
-            (error) => {
-
-                console.error(
-                    "❌ WebSocket ошибка:",
-                    error.message
-                );
-            }
-        );
-    }
-);
-
-
-// =====================================================
-// START SERVER
-// =====================================================
-
-initDatabase()
-    .then(() => {
-
-        server.listen(
-            PORT,
-            () => {
-
-                console.log(
-                    "================================"
-                );
-
-                console.log(
-                    "🚀 CASE18 SERVER ЗАПУЩЕН"
-                );
-
-                console.log(
-                    "================================"
-                );
-
-                console.log(
-                    `🌐 PORT: ${PORT}`
-                );
-            }
-        );
-
-    })
-    .catch(
-        (error) => {
-
-            console.error(
-                "❌ Не удалось запустить сервер:",
-                error
-            );
-
-            process.exit(1);
-        }
-    );
