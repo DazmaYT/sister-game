@@ -35,6 +35,8 @@ let gameState = null;
 // DATABASE INIT
 // =====================================================
 
+let dbConnected = false;
+
 async function initDatabase() {
 
     try {
@@ -51,13 +53,13 @@ async function initDatabase() {
             "💾 PostgreSQL: таблица game_state готова"
         );
 
+        dbConnected = true;
 
         const result = await pool.query(`
             SELECT state
             FROM game_state
             WHERE id = 1
         `);
-
 
         if (result.rows.length > 0) {
 
@@ -76,12 +78,16 @@ async function initDatabase() {
 
     } catch (error) {
 
-        console.error(
-            "❌ Ошибка PostgreSQL:",
-            error
+        dbConnected = false;
+
+        console.warn(
+            "⚠️ PostgreSQL недоступен, работаем без БД:",
+            error.message
         );
 
-        throw error;
+        console.log(
+            "💾 Сервер запустится в offline режиме"
+        );
     }
 }
 
@@ -93,6 +99,11 @@ async function initDatabase() {
 async function saveGameState() {
 
     if (!gameState) {
+        return;
+    }
+
+    if (!dbConnected) {
+        console.log("💾 БД недоступна, состояние не сохранено");
         return;
     }
 
@@ -132,7 +143,7 @@ async function saveGameState() {
 
 
 // =====================================================
-// ПОЛНЫЙ RESET DATABASE
+// POLНЫЙ RESET DATABASE
 // =====================================================
 
 async function resetDatabase() {
@@ -141,21 +152,28 @@ async function resetDatabase() {
         "🗑️ НАЧИНАЕМ ПОЛНЫЙ СБРОС"
     );
 
-    // Сначала память сервера
     gameState = null;
 
-    // Затем база
-    await pool.query(`
-        DELETE FROM game_state
-        WHERE id = 1
-    `);
+    if (!dbConnected) {
+        console.log("💾 БД недоступна, только очистка памяти");
+        return;
+    }
 
-    // Дополнительно VACUUM здесь НЕ нужен:
-    // DELETE полностью удаляет запись id=1.
+    try {
+        await pool.query(`
+            DELETE FROM game_state
+            WHERE id = 1
+        `);
 
-    console.log(
-        "✅ PostgreSQL: game_state полностью очищен"
-    );
+        console.log(
+            "✅ PostgreSQL: game_state полностью очищен"
+        );
+    } catch (error) {
+        console.error(
+            "❌ Ошибка удаления из БД:",
+            error
+        );
+    }
 }
 
 
@@ -577,58 +595,39 @@ wss.on(
 
                         try {
 
-                            /*
-                             * 1. Удаляем состояние
-                             *    из памяти Node.js.
-                             */
-
                             gameState = null;
 
+                            if (dbConnected) {
 
-                            /*
-                             * 2. Удаляем состояние
-                             *    из PostgreSQL.
-                             */
-
-                            await pool.query(`
-                                DELETE FROM game_state
-                                WHERE id = 1
-                            `);
-
-
-                            /*
-                             * 3. Проверяем,
-                             *    что запись действительно удалена.
-                             */
-
-                            const check =
                                 await pool.query(`
+                                    DELETE FROM game_state
+                                    WHERE id = 1
+                                `);
+
+                                const check = await pool.query(`
                                     SELECT id
                                     FROM game_state
                                     WHERE id = 1
                                 `);
 
+                                if (check.rows.length > 0) {
+                                    throw new Error(
+                                        "Запись game_state всё ещё существует после DELETE"
+                                    );
+                                }
 
-                            if (check.rows.length > 0) {
+                                console.log(
+                                    "✅ PostgreSQL полностью очищен"
+                                );
 
-                                throw new Error(
-                                    "Запись game_state всё ещё существует после DELETE"
+                            } else {
+
+                                console.log(
+                                    "💾 БД недоступна, очищена только память"
                                 );
                             }
 
-
-                            console.log(
-                                "✅ PostgreSQL полностью очищен"
-                            );
-
-
-                            /*
-                             * 4. Отправляем reset
-                             *    ВСЕМ подключённым клиентам.
-                             */
-
                             sendGameReset();
-
 
                             console.log(
                                 "✅ ПОЛНЫЙ СБРОС ВЫПОЛНЕН"
@@ -641,12 +640,10 @@ wss.on(
                                 error
                             );
 
-
                             send(
                                 socket,
                                 {
                                     type: "resetError",
-
                                     message:
                                         "Не удалось полностью очистить игру"
                                 }
