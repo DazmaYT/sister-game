@@ -791,6 +791,22 @@ function selectRole(role) {
         }
     }
 }
+
+function backToRoles() {
+    currentRole = null;
+    
+    // Скрываем все экраны
+    const screens = document.querySelectorAll('.screen');
+    screens.forEach(screen => screen.classList.remove('active'));
+    
+    // Показываем экран выбора ролей
+    const roleScreen = document.getElementById('roleScreen');
+    if (roleScreen) {
+        roleScreen.classList.add('active');
+    }
+    
+    console.log("🔙 Возврат к выбору ролей");
+}
 // ==========================================
 // ИДЕНТИФИКАЦИЯ
 // ==========================================
@@ -2427,30 +2443,7 @@ function renderOperator() {
 
 
 
-/* =====================================================
-   ROLE
-===================================================== */
 
-
-
-
-function backToRoles() {
-
-    document
-        .querySelectorAll(".screen")
-        .forEach(
-            x =>
-                x.classList.remove(
-                    "active"
-                )
-        );
-
-    document
-        .getElementById(
-            "roleScreen"
-        )
-        .classList.add("active");
-}
 
 
 /* =====================================================
