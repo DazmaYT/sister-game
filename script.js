@@ -764,10 +764,7 @@ let lastSentState = null;
 
 
 
-var state = JSON.parse(localStorage.getItem("case18_state")) || {
-    currentStage: 1,
-    completed: []
-};
+
 
 
 function selectRole(role) {
@@ -1207,27 +1204,7 @@ if (
 
 });
 
-// ==========================================
-// ОТПРАВКА СОСТОЯНИЯ
-// ==========================================
 
-function sendGameState() {
-    if (currentRole !== "player") return;
-    if (isReceivingRemoteState) return;
-    if (!syncSocket || syncSocket.readyState !== WebSocket.OPEN) return;
-
-    const stateString = JSON.stringify(state);
-    if (stateString === lastSentState) return;
-    lastSentState = stateString;
-
-    syncSocket.send(
-        JSON.stringify({
-            type: "gameState",
-            playerId: state.playerId,
-            state: state
-        })
-    );
-}
 
 function sendOperatorState(playerState) {
 
@@ -1275,14 +1252,10 @@ console.log(
     window.Telegram?.WebApp?.initDataUnsafe?.user
 );
 
-let state = {
-
+let state = JSON.parse(localStorage.getItem("case18_state")) || {
     currentStage: 1,
-
     completed: [],
-
     revealedSecondPart: false,
-
     qrUnlocked: false,
 
     penalty: null,
@@ -1310,15 +1283,31 @@ let state = {
     guessNumber: null,
 
     sequenceGame: null,
-
     reactionGame: null,
 
     cardsGameFinished: false,
-
     logs: [],
-
     pendingOperator: null
 };
+
+
+function sendGameState() {
+    if (currentRole !== "player") return;
+    if (isReceivingRemoteState) return;
+    if (!syncSocket || syncSocket.readyState !== WebSocket.OPEN) return;
+
+    const stateString = JSON.stringify(state);
+    if (stateString === lastSentState) return;
+    lastSentState = stateString;
+
+    syncSocket.send(
+        JSON.stringify({
+            type: "gameState",
+            playerId: state.playerId,
+            state: state
+        })
+    );
+}
 
 // Telegram → playerId
 if (window.Telegram?.WebApp?.initDataUnsafe?.user) {
